@@ -1,18 +1,22 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, Copy, Eye, EyeOff, Flag, LogOut, Printer, RefreshCw, Shuffle, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Copy, Eye, EyeOff, Flag, LogOut, Printer, RefreshCw, Share2, Shuffle, Users } from 'lucide-react';
 import { api, errorText, mmss, useClock, usePoll, useStored, ApiError } from '@/lib/client';
 import { criteria, reactionByKey, reactions, stages, type ReactionKey } from '@/lib/spin';
-import { Bars, Brand, Notice, ScorePicker, StageBadge, Stepper } from '@/components/ui';
+import { Bars, Brand, Notice, Qr, ScorePicker, StageBadge, Wall, useOrigin } from '@/components/ui';
+import { bridges, presentSolution, readySignals, sTopics } from '@/lib/content';
 
-type Report = { round: number; advisor: string; customer: string; scenario: string; scores: number[]; comment: string; reactions: Partial<Record<ReactionKey, number>>; stageReached: number; seconds: number; createdAt: number };
+type Report = { round: number; advisor: string; customer: string; scenario: string; scores: number[]; comment: string; reactions: Partial<Record<ReactionKey, number>>; stageReached: number; seconds: number; createdAt: number; wall?: number };
 type Game = {
   revision: number; code: string; now: number; me: number; role: 'advisor' | 'customer';
   players: { name: string }[]; round: number; phase: 'lobby' | 'play' | 'feedback' | 'report';
   stage: number; maxStage: number; ready: boolean; startedAt: number | null; ends: number | null; duration: number;
   scenario: { id: number; title: string; en: string; brief: string };
   lines?: string[][];
-  persona?: { facts: string[]; attitude: string; objection: string; play: string[] };
+  objections?: { line: string; stage: 'S' | 'P' | 'I' | 'N'; response: string }[];
+  presentAngle?: string;
+  persona?: { facts: string[]; attitude: string; objection: string; play: string[]; hiddenNeed?: string; wallOpens?: string[]; wallCloses?: string[]; objections?: string[] };
+  wall: number;
   reactions: { k: ReactionKey; at: number; stage: number }[];
   reports: Report[];
 };
@@ -176,160 +180,194 @@ function CardImage({ session, game }: { session: Session; game: Game }) {
   return src ? <img className="card-image" src={src} alt={`การ์ดลูกค้า: ${game.scenario.title}`} /> : <div className="card-image card-image-loading">กำลังโหลดการ์ด…</div>;
 }
 
-function PersonaBrief({ game, open = true }: { game: Game; open?: boolean }) {
+function ShareRoom({ game }: { game: Game }) {
+  const origin = useOrigin();
+  const link = `${origin}/pair?code=${game.code}`;
+  async function share() {
+    try {
+      if (navigator.share) await navigator.share({ title: 'SPIN Role Play', text: `มาฝึก SPIN ด้วยกัน รหัสห้อง ${game.code}`, url: link });
+      else { await navigator.clipboard.writeText(link); alert('คัดลอกลิงก์แล้ว'); }
+    } catch { /* cancelled */ }
+  }
+  return <section className="center-stack">
+    <div className="card wait-card">
+      <span className="eyebrow">รอคู่ของคุณ</span>
+      <h2>ให้เพื่อนสแกน QR นี้</h2>
+      {origin && <Qr url={link} size={200} />}
+      <p className="muted">หรือเปิดเว็บนี้ แล้วใส่รหัสห้อง</p>
+      <div className="big-code">{game.code}</div>
+      <button type="button" className="btn btn-primary btn-lg" onClick={share}><Share2 size={20} /> แชร์ลิงก์ให้เพื่อน</button>
+      <div className="pulse-dot">กำลังรอเพื่อนเข้าห้อง…</div>
+    </div>
+  </section>;
+}
+
+function CustomerBrief({ game, session }: { game: Game; session: Session }) {
   const p = game.persona!;
-  return <details className="card persona" open={open}>
-    <summary><span className="eyebrow">บทของคุณ</span><b>{game.scenario.title}</b></summary>
-    <ul className="facts">{p.facts.map(f => <li key={f}>{f}</li>)}</ul>
-    <p className="attitude"><b>ทัศนคติ:</b> {p.attitude}</p>
-    <p className="objection">ประโยคติดปาก: {p.objection}</p>
-  </details>;
+  const [showCard, setShowCard] = useState(false);
+  return <div className="stack">
+    <div className="card persona">
+      <span className="eyebrow">บทของคุณ</span>
+      <h2 className="persona-title">{game.scenario.title}</h2>
+      <ul className="facts">{p.facts.map(f => <li key={f}>{f}</li>)}</ul>
+      <p className="objection">ประโยคติดปาก: {p.objection}</p>
+      {p.hiddenNeed && <p className="hidden-need">🔒 <b>ในใจลึกๆ (บอกเมื่อถูกถามดีๆ เท่านั้น):</b> {p.hiddenNeed}</p>}
+      <button type="button" className="btn btn-ghost btn-block" onClick={() => setShowCard(v => !v)}>{showCard ? <><EyeOff size={18} /> ซ่อนการ์ดต้นฉบับ</> : <><Eye size={18} /> ดูการ์ดต้นฉบับ</>}</button>
+      {showCard && <CardImage session={session} game={game} />}
+    </div>
+    {(p.wallOpens?.length || p.wallCloses?.length) ? <div className="card wall-guide">
+      <span className="eyebrow">กำแพงของคุณ</span>
+      <div className="two-col">
+        <div><b className="good-text">⬇ ลดลงเมื่อตัวแทน…</b><ul>{p.wallOpens?.map(x => <li key={x}>{x}</li>)}</ul></div>
+        <div><b className="warn-text">⬆ สูงขึ้นเมื่อตัวแทน…</b><ul>{p.wallCloses?.map(x => <li key={x}>{x}</li>)}</ul></div>
+      </div>
+    </div> : null}
+    <details className="card">
+      <summary className="summary-line">วิธีตอบในแต่ละขั้น</summary>
+      <ol className="play-guide">{stages.map((s, i) => <li key={s.key}><StageBadge k={s.key} size="sm" /> <span>{p.play[i]}</span></li>)}</ol>
+      {p.objections && p.objections.length > 0 && <><b>ข้อโต้แย้งที่ใช้ได้</b><ul className="facts">{p.objections.map(o => <li key={o}>“{o}”</li>)}</ul></>}
+    </details>
+  </div>;
 }
 
 function Lobby({ game, act, busy, session }: P) {
   const partner = game.players[1 - game.me];
   const advisorName = game.players[game.role === 'advisor' ? game.me : 1 - game.me]?.name;
-  if (!partner) return <section className="center-stack">
-    <div className="card wait-card">
-      <span className="eyebrow">รอคู่ของคุณ</span>
-      <h2>ส่งรหัสห้องนี้ให้เพื่อน</h2>
-      <div className="big-code">{game.code}</div>
-      <p>เพื่อนเปิด <b>{typeof location !== 'undefined' ? location.host : ''}/pair</b> แล้วกด “มีรหัสห้องแล้ว”</p>
-      <div className="pulse-dot">กำลังรอ…</div>
+  const wasReady = useRef(game.ready);
+  useEffect(() => { if (game.ready && !wasReady.current) navigator.vibrate?.([60, 40, 60]); wasReady.current = game.ready; }, [game.ready]);
+  if (!partner) return <ShareRoom game={game} />;
+
+  if (game.role === 'customer') return <section className="narrow with-dock">
+    <div className="role-hero role-hero-customer">
+      <span>รอบที่ {game.round}</span>
+      <h1>คุณรับบท “ลูกค้า”</h1>
+      <p>อ่านบทให้เข้าใจ {advisorName} จะเป็นตัวแทนมาคุยกับคุณ ระหว่างคุยกดอีโมจิบอกความรู้สึกได้ตลอด</p>
+    </div>
+    <CustomerBrief game={game} session={session} />
+    <div className="dock">
+      <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => act({ action: 'shuffle' })} aria-label="เปลี่ยนการ์ด"><Shuffle size={18} /></button>
+      {game.ready
+        ? <button type="button" className="btn btn-done btn-lg" disabled={busy} onClick={() => act({ action: 'ready', ready: false })}><Check size={20} /> พร้อมแล้ว · รอตัวแทนเริ่ม</button>
+        : <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={() => act({ action: 'ready' })}>อ่านบทแล้ว พร้อมเล่น <ArrowRight size={20} /></button>}
     </div>
   </section>;
 
-  if (game.role === 'customer') return <section className="lobby-grid">
-    <div>
-      <div className="role-hero role-hero-customer">
-        <span>รอบที่ {game.round}</span>
-        <h1>คุณรับบท “ลูกค้า”</h1>
-        <p>อ่านการ์ดให้เข้าใจบทบาท แล้วกด “พร้อมแล้ว” {advisorName} จะเป็นตัวแทนมาคุยกับคุณ</p>
-      </div>
-      <CardImage session={session} game={game} />
+  return <section className="narrow with-dock">
+    <div className="role-hero role-hero-advisor">
+      <span>รอบที่ {game.round}</span>
+      <h1>คุณรับบท “ตัวแทน”</h1>
+      <p>ลูกค้าวันนี้: <b>{game.scenario.title}</b> — {game.scenario.brief} ({partner.name} รับบท)</p>
     </div>
-    <div className="stack">
-      <PersonaBrief game={game} />
-      <div className="card">
-        <span className="eyebrow">เล่นบทลูกค้าให้สมจริง</span>
-        <ol className="play-guide">{stages.map((s, i) => <li key={s.key}><StageBadge k={s.key} size="sm" /> <span>{game.persona!.play[i]}</span></li>)}</ol>
-        <p className="muted small">ระหว่างคุย กดอีโมจิบอกความรู้สึกได้ตลอด ตัวแทนจะเห็นทันที</p>
-      </div>
-      <div className="sticky-actions">
-        <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => act({ action: 'shuffle' })}><Shuffle size={18} /> เปลี่ยนการ์ด</button>
-        {game.ready
-          ? <button type="button" className="btn btn-done btn-lg" disabled={busy} onClick={() => act({ action: 'ready', ready: false })}><Check size={20} /> พร้อมแล้ว · รอตัวแทนเริ่ม</button>
-          : <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={() => act({ action: 'ready' })}>อ่านการ์ดแล้ว พร้อมเล่น <ArrowRight size={20} /></button>}
+    <div className="card">
+      <span className="eyebrow">เป้าหมาย: ลดกำแพงลูกค้าด้วยคำถาม ไม่ใช่การขาย</span>
+      <div className="plan">{stages.map(s => <div key={s.key} className="plan-item" style={{ '--c': s.color } as React.CSSProperties}>
+        <StageBadge k={s.key} /><div><b>{s.thai}</b><span>{s.meaning}</span></div></div>)}</div>
+      <p className="muted small">ระหว่างคุยมีตัวอย่างประโยคสำหรับลูกค้ารายนี้ทุกขั้น และเลื่อนไป-กลับได้ตลอด</p>
+    </div>
+    <div className="card">
+      <span className="eyebrow">เวลาต่อรอบ</span>
+      <div className="segmented">
+        {[300, 600, 900, 1200].map(d => <button type="button" key={d} className={game.duration === d ? 'on' : ''} disabled={busy} onClick={() => act({ action: 'duration', duration: d })}>{d / 60} นาที</button>)}
       </div>
     </div>
-  </section>;
-
-  return <section className="lobby-grid">
-    <div>
-      <div className="role-hero role-hero-advisor">
-        <span>รอบที่ {game.round}</span>
-        <h1>คุณรับบท “ตัวแทน”</h1>
-        <p>ลูกค้าของคุณวันนี้คือ <b>{game.scenario.title}</b> — {game.scenario.brief} ({partner.name} รับบท)</p>
-      </div>
-      <div className="card">
-        <span className="eyebrow">แผนการคุย 4 ขั้น</span>
-        <div className="plan">{stages.map(s => <div key={s.key} className="plan-item" style={{ '--c': s.color } as React.CSSProperties}>
-          <StageBadge k={s.key} /><div><b>{s.name}</b><span>{s.meaning}</span></div></div>)}</div>
-        <p className="muted small">ระหว่างคุยจะมีตัวอย่างประโยคสำหรับลูกค้ารายนี้ในแต่ละขั้น และเลื่อนไป-กลับได้ทุกเมื่อ</p>
-      </div>
-    </div>
-    <div className="stack">
-      <div className="card">
-        <span className="eyebrow">เวลาต่อรอบ</span>
-        <div className="segmented">
-          {[300, 600, 900, 1200].map(d => <button type="button" key={d} className={game.duration === d ? 'on' : ''} disabled={busy} onClick={() => act({ action: 'duration', duration: d })}>{d / 60} นาที</button>)}
-        </div>
-      </div>
-      <div className={`card status-card ${game.ready ? 'ok' : ''}`}>
-        {game.ready ? <><Check /> {partner.name} อ่านการ์ดแล้ว พร้อมเริ่ม</> : <><span className="pulse-dot" /> รอ {partner.name} อ่านการ์ดลูกค้า…</>}
-      </div>
-      <div className="sticky-actions">
-        <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => act({ action: 'shuffle' })}><Shuffle size={18} /> สุ่มลูกค้าใหม่</button>
-        <button type="button" className="btn btn-primary btn-lg" disabled={busy || !game.ready} onClick={() => act({ action: 'start' })}>เริ่ม Role Play <ArrowRight size={20} /></button>
-      </div>
+    <div className="dock">
+      <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => act({ action: 'shuffle' })} aria-label="สุ่มลูกค้าใหม่"><Shuffle size={18} /></button>
+      <button type="button" className="btn btn-primary btn-lg" disabled={busy || !game.ready} onClick={() => act({ action: 'start' })}>
+        {game.ready ? <>เริ่ม Role Play <ArrowRight size={20} /></> : <><span className="pulse-dot" /> รอ {partner.name} อ่านบท…</>}</button>
     </div>
   </section>;
 }
 
-function Timer({ game }: { game: Game }) {
+function useTimeLeft(game: Game) {
   const now = useClock(game.now);
-  const left = (game.ends ?? now) - now;
-  const over = left < 0;
-  return <div className={`timer ${over ? 'timer-over' : left < 60_000 ? 'timer-low' : ''}`} role="timer">
-    {over ? `+${mmss(-left)} เกินเวลา` : mmss(left)}
-  </div>;
+  return (game.ends ?? now) - now;
+}
+function TimeText({ left }: { left: number }) {
+  return <span className={`timer ${left < 0 ? 'timer-over' : left < 60_000 ? 'timer-low' : ''}`} role="timer">{left < 0 ? `+${mmss(-left)}` : mmss(left)}</span>;
 }
 
 function AdvisorPlay({ game, act, busy }: P) {
   const [stage, setStage] = useState(game.stage);
-  const [tab, setTab] = useState<'client' | 'deck'>('client');
+  const [more, setMore] = useState(false);
+  const [asked, setAsked] = useState<string[]>([]);
   const pending = useRef(false);
+  const left = useTimeLeft(game);
   useEffect(() => { if (!pending.current) setStage(game.stage); }, [game.stage, game.revision]);
+  useEffect(() => setMore(false), [stage]);
   const go = async (i: number) => {
     if (i < 0 || i > 3) return;
-    setStage(i); pending.current = true;
+    setStage(i); pending.current = true; scrollTo({ top: 0, behavior: 'smooth' });
     await act({ action: 'stage', stage: i }); pending.current = false;
   };
   const s = stages[stage];
   const latest = game.reactions.at(-1);
-  const [toast, setToast] = useState<typeof latest>();
+  const [flash, setFlash] = useState<typeof latest>();
   const seen = useRef(latest?.at ?? 0);
   useEffect(() => {
     if (latest && latest.at > seen.current) {
-      seen.current = latest.at; setToast(latest);
-      navigator.vibrate?.(40);
-      const t = setTimeout(() => setToast(undefined), 7000); return () => clearTimeout(t);
+      seen.current = latest.at; setFlash(latest); navigator.vibrate?.(40);
+      const t = setTimeout(() => setFlash(undefined), 5000); return () => clearTimeout(t);
     }
   }, [latest]);
-  const lines = tab === 'client' ? game.lines![stage] : s.examples;
+  const lines = game.lines![stage];
+  const bridge = bridges.find(b => b.from === s.key);
+  const objections = (game.objections ?? []).filter(o => o.stage === s.key);
+  const r = flash ? reactionByKey[flash.k] : null;
 
-  return <section className="play">
-    <div className="play-top">
-      <Stepper current={stage} reached={Math.max(game.maxStage, stage)} onPick={go} />
-      <Timer game={game} />
+  return <section className="play with-dock">
+    <div className="live-bar">
+      <div className="mini-steps" role="tablist" aria-label="ลำดับ SPIN">
+        {stages.map((x, i) => <button type="button" role="tab" key={x.key} aria-selected={i === stage} onClick={() => go(i)}
+          className={`mini-step ${i === stage ? 'now' : i <= Math.max(game.maxStage, stage) ? 'done' : ''}`} style={{ '--c': x.color } as React.CSSProperties}>
+          {x.key}{i < stage && <small>✓</small>}</button>)}
+      </div>
+      <Wall level={game.wall} compact />
+      <TimeText left={left} />
     </div>
+    {r && <div className={`live-flash tone-${r.tone}`} role="status" key={flash!.at}><span>{r.emoji}</span><div><b>ลูกค้า: {r.label}</b><small>{r.coach}</small></div></div>}
 
-    {toast && <div className={`reaction-toast tone-${reactionByKey[toast.k].tone}`} role="status" key={toast.at}>
-      <span className="toast-emoji">{reactionByKey[toast.k].emoji}</span>
-      <div><b>ลูกค้า: {reactionByKey[toast.k].label}</b><span>💬 {reactionByKey[toast.k].coach}</span></div>
-    </div>}
+    <article className="card stage-card" style={{ '--c': s.color } as React.CSSProperties}>
+      <header>
+        <StageBadge k={s.key} size="lg" />
+        <div><h2>{s.thai}</h2><p>{s.name} · {s.meaning}</p></div>
+      </header>
+      <p className="goal">🎯 {s.goal}</p>
+      <span className="eyebrow">ลองถามลูกค้า{game.scenario.title}</span>
+      <ul className="lines lines-big">{(more ? lines : lines.slice(0, 2)).map(l => <li key={l}>“{l}”</li>)}</ul>
+      {lines.length > 2 && <button type="button" className="link-btn" onClick={() => setMore(v => !v)}>{more ? 'ย่อ' : `ดูอีก ${lines.length - 2} ประโยค`}</button>}
 
-    <div className="play-grid">
-      <article className="card stage-card" style={{ '--c': s.color } as React.CSSProperties}>
-        <header>
-          <StageBadge k={s.key} size="lg" />
-          <div><h2>{s.name}</h2><p>{s.meaning}</p></div>
-        </header>
-        <p className="goal">🎯 {s.goal}</p>
-        <div className="tabs tabs-small" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === 'client'} className={tab === 'client' ? 'on' : ''} onClick={() => setTab('client')}>สำหรับลูกค้า{game.scenario.title}</button>
-          <button type="button" role="tab" aria-selected={tab === 'deck'} className={tab === 'deck' ? 'on' : ''} onClick={() => setTab('deck')}>ตัวอย่างจากบทเรียน</button>
-        </div>
-        <ul className="lines">{lines.map(l => <li key={l}>“{l}”</li>)}</ul>
+      {s.key === 'S' && sTopics.length > 0 && <details className="disclosure">
+        <summary>หัวข้อที่ควรรู้ ({asked.length}/{sTopics.length})</summary>
+        <div className="topic-chips">{sTopics.map(t => <button type="button" key={t.label} className={asked.includes(t.label) ? 'on' : ''} aria-pressed={asked.includes(t.label)}
+          onClick={() => setAsked(a => a.includes(t.label) ? a.filter(x => x !== t.label) : [...a, t.label])} title={t.question}>{asked.includes(t.label) ? '✓ ' : ''}{t.label}</button>)}</div>
+      </details>}
+      {objections.length > 0 && <details className="disclosure">
+        <summary>ถ้าลูกค้าค้าน ({objections.length})</summary>
+        {objections.map(o => <div key={o.line} className="objection-pair"><p className="objection">“{o.line}”</p><p>👉 {o.response}</p></div>)}
+      </details>}
+      {s.key === 'N' && presentSolution.steps.length > 0 && <details className="disclosure" open>
+        <summary>ต่อยอดสู่การนำเสนอ (Present Solution)</summary>
+        {presentSolution.bridge[0] && <p className="bridge">“{presentSolution.bridge[0]}”</p>}
+        <ol className="steps">{presentSolution.steps.map(x => <li key={x.title}><b>{x.title}</b> — {x.detail}</li>)}</ol>
+        {game.presentAngle && <p className="muted small">แนวทางที่น่าจะเหมาะกับลูกค้ารายนี้: {game.presentAngle}</p>}
+      </details>}
+      <details className="disclosure">
+        <summary>เคล็ดลับขั้นนี้</summary>
         <div className="tips">
           <div><b>✅ ทำแบบนี้</b><ul>{s.doThis.map(t => <li key={t}>{t}</li>)}</ul></div>
           <div className="avoid"><b>⚠️ ระวัง</b><p>{s.avoid}</p></div>
         </div>
-      </article>
+        {readySignals[s.key].length > 0 && <><b>🚦 พร้อมไปขั้นถัดไปเมื่อ</b><ul>{readySignals[s.key].map(x => <li key={x}>{x}</li>)}</ul></>}
+        <b>📘 ตัวอย่างจากบทเรียน</b>
+        <ul className="lines">{s.examples.map(l => <li key={l}>“{l}”</li>)}</ul>
+      </details>
+      {bridge && <p className="bridge">🔗 ประโยคเชื่อมไป {bridge.to}: “{bridge.lines[0]}”</p>}
+    </article>
 
-      <aside className="card mood">
-        <span className="eyebrow">ความรู้สึกลูกค้า (สด)</span>
-        {game.reactions.length === 0 ? <p className="muted">ยังไม่มี ลูกค้าจะกดอีโมจิระหว่างคุย</p>
-          : <ol className="mood-feed">{[...game.reactions].reverse().slice(0, 8).map(r => <li key={r.at}>
-            <span>{reactionByKey[r.k].emoji}</span><span>{reactionByKey[r.k].label}</span><StageBadge k={stages[r.stage].key} size="sm" />
-          </li>)}</ol>}
-      </aside>
-    </div>
-
-    <div className="play-actions">
-      <button type="button" className="btn btn-ghost btn-lg" disabled={stage === 0} onClick={() => go(stage - 1)}><ArrowLeft size={20} /> ย้อนกลับ {stage > 0 && stages[stage - 1].key}</button>
+    <div className="dock">
+      <button type="button" className="btn btn-ghost btn-lg" disabled={stage === 0} onClick={() => go(stage - 1)} aria-label="ย้อนกลับ"><ArrowLeft size={20} /> {stage > 0 && stages[stage - 1].key}</button>
       {stage < 3
-        ? <button type="button" className="btn btn-primary btn-lg" onClick={() => go(stage + 1)}>ถัดไป {stages[stage + 1].key} <ArrowRight size={20} /></button>
+        ? <button type="button" className="btn btn-primary btn-lg" onClick={() => go(stage + 1)}>ถัดไป {stages[stage + 1].key} · {stages[stage + 1].thai} <ArrowRight size={20} /></button>
         : <button type="button" className="btn btn-finish btn-lg" disabled={busy} onClick={() => confirm('จบบทสนทนาและให้ลูกค้าให้คะแนน?') && act({ action: 'finish' })}><Flag size={20} /> จบบทสนทนา</button>}
     </div>
     {stage < 3 && <button type="button" className="link-btn end-early" disabled={busy} onClick={() => confirm('จบบทสนทนาตอนนี้เลย?') && act({ action: 'finish' })}>จบบทสนทนาก่อนครบ 4 ขั้น</button>}
@@ -338,36 +376,34 @@ function AdvisorPlay({ game, act, busy }: P) {
 
 function CustomerPlay({ game, act, session }: P) {
   const [sent, setSent] = useState<ReactionKey>();
-  const [showCard, setShowCard] = useState(false);
+  const left = useTimeLeft(game);
   const s = stages[game.stage];
   async function send(k: ReactionKey) {
     setSent(k); navigator.vibrate?.(25);
     setTimeout(() => setSent(x => x === k ? undefined : x), 1500);
     await act({ action: 'react', kind: k });
   }
+  const groups: { title: string; tone: 'good' | 'neutral' | 'warn' }[] = [
+    { title: '👍 รู้สึกดี', tone: 'good' }, { title: '🤔 ยังลังเล', tone: 'neutral' }, { title: '👎 ไม่โอเค', tone: 'warn' },
+  ];
   return <section className="play">
-    <div className="play-top">
-      <Stepper current={game.stage} reached={game.maxStage} />
-      <Timer game={game} />
-    </div>
-    <div className="card now-card" style={{ '--c': s.color } as React.CSSProperties}>
+    <div className="live-bar live-bar-customer" style={{ '--c': s.color } as React.CSSProperties}>
       <StageBadge k={s.key} />
-      <div><b>ตัวแทนอยู่ขั้น {s.name}</b><span>วิธีตอบ: {game.persona!.play[game.stage]}</span></div>
+      <div className="live-bar-text"><b>ตัวแทนอยู่ขั้น {s.thai}</b><small>{game.persona!.play[game.stage]}</small></div>
+      <TimeText left={left} />
     </div>
-    <div className="card react-card">
-      <h2>ตอนนี้คุณรู้สึกอย่างไร?</h2>
-      <p className="muted small">แตะได้เรื่อยๆ ตามความรู้สึกจริงระหว่างคุย ตัวแทนจะเห็นทันที</p>
-      <div className="react-grid">
-        {reactions.map(r => <button type="button" key={r.key} className={`react-btn tone-${r.tone} ${sent === r.key ? 'sent' : ''}`} onClick={() => send(r.key)}>
-          <span className="react-emoji">{r.emoji}</span><span>{r.label}</span>{sent === r.key && <em>ส่งแล้ว</em>}
-        </button>)}
-      </div>
+    <Wall level={game.wall} />
+    <div className="react-groups">
+      {groups.map(g => <div key={g.tone} className="react-group">
+        <span className="react-group-title">{g.title}</span>
+        <div className="react-grid">
+          {reactions.filter(r => r.tone === g.tone).map(r => <button type="button" key={r.key} className={`react-btn tone-${r.tone} ${sent === r.key ? 'sent' : ''}`} onClick={() => send(r.key)}>
+            <span className="react-emoji">{r.emoji}</span><span>{r.label}</span>{sent === r.key && <em>ส่งแล้ว</em>}
+          </button>)}
+        </div>
+      </div>)}
     </div>
-    <div className="stack">
-      <PersonaBrief game={game} open={false} />
-      <button type="button" className="btn btn-ghost" onClick={() => setShowCard(v => !v)}>{showCard ? <><EyeOff size={18} /> ซ่อนการ์ด</> : <><Eye size={18} /> ดูการ์ดลูกค้า</>}</button>
-      {showCard && <CardImage session={session} game={game} />}
-    </div>
+    <details className="card"><summary className="summary-line">ดูบทของฉัน ({game.scenario.title})</summary><CustomerBrief game={game} session={session} /></details>
   </section>;
 }
 
@@ -379,23 +415,30 @@ function moodSummary(reactions: Partial<Record<ReactionKey, number>>) {
 function CustomerFeedback({ game, act, busy }: P) {
   const [scores, setScores] = useState<number[]>([0, 0, 0, 0, 0]);
   const [comment, setComment] = useState('');
+  const [nudge, setNudge] = useState(false);
   const counts = useMemo(() => {
     const c: Partial<Record<ReactionKey, number>> = {};
     for (const r of game.reactions) c[r.k] = (c[r.k] ?? 0) + 1;
     return c;
   }, [game.reactions]);
   const advisor = game.players[1 - game.me].name;
-  const ok = scores.every(x => x > 0);
-  return <section className="narrow">
+  const done = scores.filter(x => x > 0).length;
+  function submit() {
+    if (done < 5) { setNudge(true); document.querySelectorAll('.score-row')[scores.findIndex(x => !x)]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    void act({ action: 'feedback', scores, comment });
+  }
+  return <section className="narrow with-dock">
     <div className="role-hero role-hero-customer"><span>จบบทสนทนา</span><h1>ให้คะแนน {advisor}</h1><p>ในมุมของลูกค้า ตัวแทนใช้ SPIN ได้ดีแค่ไหน</p></div>
     <div className="card">
-      <ScorePicker value={scores} onChange={setScores} />
+      <ScorePicker value={scores} onChange={setScores} highlightMissing={nudge} />
       <label className="field">ข้อเสนอแนะถึงตัวแทน (ไม่บังคับ)
         <textarea value={comment} onChange={e => setComment(e.target.value)} maxLength={400} rows={3} placeholder="เช่น ชอบที่ถามถึงลูกสาว ทำให้เริ่มคิดจริงๆ" />
       </label>
-      {game.reactions.length > 0 && <div className="mood-summary"><span className="eyebrow">ความรู้สึกที่คุณกดระหว่างคุย</span><div>{moodSummary(counts)}</div></div>}
-      <button type="button" className="btn btn-primary btn-lg btn-block" disabled={busy || !ok} onClick={() => act({ action: 'feedback', scores, comment })}>
-        {ok ? 'ส่งคะแนนให้ตัวแทน' : 'ให้คะแนนให้ครบ 5 ข้อ'} <ArrowRight size={20} /></button>
+      {game.reactions.length > 0 && <div className="mood-summary"><span className="eyebrow">ความรู้สึกที่คุณกดระหว่างคุย · กำแพงเหลือ {game.wall}%</span><div>{moodSummary(counts)}</div></div>}
+    </div>
+    <div className="dock">
+      <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={submit}>
+        {done < 5 ? `ให้คะแนนแล้ว ${done}/5` : 'ส่งคะแนนให้ตัวแทน'} <ArrowRight size={20} /></button>
     </div>
   </section>;
 }
@@ -425,6 +468,7 @@ function ReportCard({ r }: { r: Report }) {
       <div className="avg"><b>{avg}</b><span>/ 5</span></div>
     </header>
     <Bars values={r.scores} />
+    {typeof r.wall === 'number' && <div className="report-wall"><Wall level={r.wall} /><p className="muted small">กำแพงลูกค้าเริ่มที่ 80% ตอนจบเหลือ {r.wall}% {r.wall <= 45 ? '— ลูกค้าเปิดใจได้ดี 👏' : r.wall >= 80 ? '— ลูกค้ายังไม่เปิดใจ ลองถาม P/I ให้ตรงชีวิตลูกค้ามากขึ้น' : ''}</p></div>}
     <div className="report-points">
       <p>💪 <b>จุดแข็ง:</b> {criteria[best].label} — {criteria[best].hint}</p>
       {r.scores[low] < r.scores[best] && <p>🌱 <b>ฝึกเพิ่ม:</b> {criteria[low].label} — {criteria[low].hint}</p>}

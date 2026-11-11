@@ -7,6 +7,8 @@ import { StageBadge } from '@/components/ui';
 export type ClassView = PublicClass & { admin: boolean; adminReady: boolean };
 export type QuizView = Extract<NonNullable<PublicClass['activity']>, { kind: 'quiz' }>;
 export type FeedbackView = Extract<NonNullable<PublicClass['activity']>, { kind: 'feedback' }>;
+export type PostitView = Extract<NonNullable<PublicClass['activity']>, { kind: 'postit' }>;
+export type ShowtimeRow = PublicClass['showtime'][number];
 
 export function useClass(as: 'player' | 'display' | 'admin', delay = 1500) {
   return usePoll<ClassView>(() => api<ClassView>(`/api/class?as=${as}`), delay);
@@ -44,6 +46,19 @@ export function Countdown({ closesAt, openedAt, now }: { closesAt: number | null
   const total = closesAt - openedAt, left = Math.max(0, closesAt - now);
   return <div className="countdown">
     <div className="countdown-bar"><span style={{ width: `${(left / total) * 100}%` }} /></div>
-    <b className={left < 5000 ? 'low' : ''}>{Math.ceil(left / 1000)}</b>
+    <b className={left < 5000 ? 'low' : ''}>{Math.ceil(left / 1000)}<small> วิ</small></b>
   </div>;
+}
+
+// SHOW TIME recap: every pair that presented, ranked by the class's average score.
+export function ShowtimeTable({ rows, big }: { rows: ShowtimeRow[]; big?: boolean }) {
+  if (!rows.length) return null;
+  return <ol className={`showtime ${big ? 'showtime-big' : ''}`}>
+    {rows.map((r, i) => <li key={r.id}>
+      <span className="showtime-rank">{['🥇', '🥈', '🥉'][i] ?? `#${i + 1}`}</span>
+      <div className="showtime-who"><b>{r.advisor}</b><small>{r.customer ? `คู่กับ ${r.customer}` : ''}{r.scenarioTitle ? ` · ลูกค้า${r.scenarioTitle}` : ''} · {r.count} คนประเมิน</small></div>
+      <div className="showtime-mini" aria-hidden="true">{r.criteria.map((c, j) => <i key={j} style={{ height: `${((c ?? 0) / 5) * 100}%`, background: j < 4 ? stages[j].color : j === 4 ? '#7a5cf0' : '#e5a400' }} />)}</div>
+      <b className="showtime-score">{r.overall ?? '–'}</b>
+    </li>)}
+  </ol>;
 }

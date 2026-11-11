@@ -132,3 +132,36 @@ export const reactions: { key: ReactionKey; emoji: string; label: string; coach:
 ];
 
 export const reactionByKey = Object.fromEntries(reactions.map(r => [r.key, r])) as Record<ReactionKey, (typeof reactions)[number]>;
+
+// SHOW TIME (SPIN + Present Solution) adds a sixth criterion to the class feedback.
+export const showtimeCriteria: typeof criteria = [
+  ...criteria,
+  { key: '★', label: 'Present Solution', hint: 'นำเสนอทางออกที่ตรงกับความต้องการที่ลูกค้ายืนยันเอง' },
+];
+
+// "กำแพงลูกค้า" from the deck: every customer starts guarded; good questions lower the wall, pushing raises it.
+// Worry during Implication is the point of the stage, so it lowers the wall there.
+export const wallStart = 80;
+export function wallDelta(k: ReactionKey, stage: number) {
+  switch (k) {
+    case 'trust': return -12;
+    case 'aha': return -10;
+    case 'interested': return -8;
+    case 'agree': return -6;
+    case 'worried': return stage === 2 ? -8 : 2;
+    case 'thinking': return 2;
+    case 'bored': return 8;
+    case 'pushy': return 15;
+  }
+}
+export function wallLevel(list: { k: ReactionKey; stage: number }[]) {
+  let w = wallStart;
+  for (const r of list) w = Math.min(100, Math.max(0, w + wallDelta(r.k, r.stage)));
+  return w;
+}
+export function wallLabel(w: number) {
+  if (w <= 20) return { text: 'เปิดใจแล้ว', tone: 'good' as const };
+  if (w <= 45) return { text: 'เริ่มเปิดใจ', tone: 'good' as const };
+  if (w <= 70) return { text: 'ยังระวังตัว', tone: 'neutral' as const };
+  return { text: 'กำแพงสูง', tone: 'warn' as const };
+}

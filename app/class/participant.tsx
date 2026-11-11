@@ -2,9 +2,10 @@
 import { useEffect, useState } from 'react';
 import { ArrowRight, Check, LogOut } from 'lucide-react';
 import { api, ApiError, errorText, useClock, useStored } from '@/lib/client';
-import { improveTags, stages, strengthTags, type StageKey } from '@/lib/spin';
+import { improveTags, showtimeCriteria, stages, strengthTags, type StageKey } from '@/lib/spin';
+import { postit } from '@/lib/content';
 import { Bars, Brand, Chips, Notice, ScorePicker, StageBadge } from '@/components/ui';
-import { ChoiceLegend, Countdown, Podium, stageOf, useClass, type FeedbackView, type QuizView } from './shared';
+import { ChoiceLegend, Countdown, Podium, ShowtimeTable, stageOf, useClass, type FeedbackView, type PostitView, type QuizView } from './shared';
 
 type Me = { token: string; pid: string; name: string; classId: string };
 type Picked = { activityId: string; index: number; choice: StageKey; ms?: number };
@@ -36,6 +37,8 @@ export default function Participant() {
     {!data ? <div className="loading">กำลังเชื่อมต่อห้องเรียน…</div>
       : !a ? <Waiting />
       : a.kind === 'quiz' ? <Quiz q={a} me={me} now={data.now} onError={onAuth} />
+      : a.kind === 'postit' ? <Postit key={a.id} p={a} me={me} now={data.now} onError={onAuth} />
+      : a.kind === 'recap' ? <section className="narrow"><div className="role-hero role-hero-live"><span>SHOW TIME</span><h1>สรุปทุกคู่</h1></div><div className="card"><ShowtimeTable rows={data.showtime} /></div></section>
       : <Feedback key={a.id} f={a} me={me} onError={onAuth} />}
   </main>;
 }
@@ -122,10 +125,11 @@ function Quiz({ q, me, now: serverNow, onError }: { q: QuizView; me: Me; now: nu
     const correct = mine?.choice === q.reveal.answer;
     return <section className="narrow">
       <div className={`result-banner ${!mine ? 'none' : correct ? 'yes' : 'no'}`}>
-        {!mine ? 'ข้อนี้คุณไม่ได้ตอบ' : correct ? <>ถูกต้อง! <b>+{my?.last ?? 0}</b></> : 'ยังไม่ถูก ไม่เป็นไร ข้อหน้าเอาใหม่'}
+        {!mine ? 'ข้อนี้คุณไม่ได้ตอบ' : correct ? <>✓ ถูกต้อง! <b>+{my?.last ?? 0}</b></> : '✗ ยังไม่ถูก ข้อหน้าเอาใหม่'}
       </div>
       <div className="card reveal-card" style={{ '--c': right.color } as React.CSSProperties}>
         <span className="eyebrow">เฉลยข้อ {q.reveal.index + 1}</span>
+        {mine && !correct && <p className="pick-vs">คุณตอบ <StageBadge k={mine.choice} size="sm" /> → เฉลย <StageBadge k={right.key} size="sm" /></p>}
         <div className="reveal-answer"><StageBadge k={right.key} size="lg" /><div><b>{right.name}</b><span>{right.meaning}</span></div></div>
         <p>💡 {q.reveal.why}</p>
       </div>
@@ -142,23 +146,26 @@ function Quiz({ q, me, now: serverNow, onError }: { q: QuizView; me: Me; now: nu
 
 function MyRank({ q, me }: { q: QuizView; me: Me }) {
   const my = q.scores[me.pid];
+  const same = my ? Object.values(q.scores).filter(x => x.score === my.score) : [];
+  const tied = same.length > 1;
+  const rank = my ? 1 + Object.values(q.scores).filter(x => x.score > my.score).length : 0;
   return <div className="card my-rank">
-    {my ? <><div><span className="eyebrow">อันดับของคุณ</span><b className="rank-big">#{my.rank}</b><span className="muted"> จาก {q.players} คน</span></div>
+    {my ? <><div><span className="eyebrow">อันดับของคุณ</span><b className="rank-big">{tied ? 'เสมอ ' : ''}#{rank}</b><span className="muted"> จาก {q.players} คน</span></div>
       <div className="rank-score"><b>{my.score.toLocaleString()}</b><span>คะแนน · ถูก {my.correct} ข้อ</span></div></>
       : <p className="muted">ตอบข้อถัดไปเพื่อขึ้นกระดานคะแนน</p>}
   </div>;
 }
 
 function Feedback({ f, me, onError }: { f: FeedbackView; me: Me; onError: (e: unknown) => void }) {
-  const [scores, setScores] = useState<number[]>([0, 0, 0, 0, 0]);
+  const [scores, setScores] = useState<number[]>(showtimeCriteria.map(() => 0));
   const [strengths, setStrengths] = useState<string[]>([]);
   const [improves, setImproves] = useState<string[]>([]);
   const [good, setGood] = useState('');
   const [tip, setTip] = useState('');
   const [sentFor, setSentFor] = useStored<string>('spin-class-ballot');
   const [busy, setBusy] = useState(false);
+  const [nudge, setNudge] = useState(false);
   const sent = sentFor === f.id;
-  const ok = scores.every(x => x > 0);
 
   async function submit() {
     setBusy(true);
@@ -173,13 +180,14 @@ function Feedback({ f, me, onError }: { f: FeedbackView; me: Me; onError: (e: un
     <div className="role-hero role-hero-live"><span>● กำลัง Role Play หน้าห้อง</span><h1>ตั้งใจฟัง แล้วเตรียมให้ Feedback</h1>{who}</div>
     <div className="card"><span className="eyebrow">สังเกตตัวแทน 5 ด้าน</span>
       <ol className="watch-list">{stages.map(s => <li key={s.key}><StageBadge k={s.key} size="sm" /> <b>{s.name}</b> — {s.meaning}</li>)}
-        <li><span className="score-key">♥</span> <b>Listening</b> — ฟัง ทวนสรุป และไม่รีบขาย</li></ol></div>
+        <li><span className="score-key">♥</span> <b>Listening</b> — ฟัง ทวนสรุป และไม่รีบขาย</li>
+        <li><span className="score-key">★</span> <b>Present Solution</b> — นำเสนอทางออกที่ตรงกับความต้องการของลูกค้า</li></ol></div>
     <div className="card wait-card"><div className="pulse-dot" /> เมื่อผู้สอนกด “จบ Role Play” ฟอร์มจะเปิดให้กรอก</div>
   </section>;
 
   if (f.phase === 'results') return <section className="narrow">
     <div className="role-hero role-hero-live"><span>ผลจากทั้งห้อง</span><h1>{f.advisor}</h1>{who}</div>
-    {f.summary && <div className="card"><div className="avg avg-inline"><b>{f.summary.overall ?? '–'}</b><span>/ 5 · จาก {f.summary.count} คน</span></div><Bars values={f.summary.criteria} /></div>}
+    {f.summary && <div className="card"><div className="avg avg-inline"><b>{f.summary.overall ?? '–'}</b><span>/ 5 · จาก {f.summary.count} คน</span></div><Bars values={f.summary.criteria} list={showtimeCriteria} /></div>}
     <p className="muted center">ดูสรุปเต็มบนจอหน้าห้อง</p>
   </section>;
 
@@ -188,16 +196,65 @@ function Feedback({ f, me, onError }: { f: FeedbackView; me: Me; onError: (e: un
       <button type="button" className="btn btn-ghost" onClick={() => setSentFor(null)}>แก้ไขคำตอบ</button></div>
   </section>;
 
-  return <section className="narrow">
+  const done = scores.filter(x => x > 0).length;
+  const total = showtimeCriteria.length;
+  function trySubmit() {
+    if (done < total) { setNudge(true); document.querySelectorAll('.score-row')[scores.findIndex(x => !x)]?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    void submit();
+  }
+  return <section className="narrow with-dock">
     <div className="role-hero role-hero-live"><span>ให้ Feedback ตัวแทน</span><h1>{f.advisor} ใช้ SPIN ได้แค่ไหน?</h1>{who}</div>
     <div className="card">
-      <ScorePicker value={scores} onChange={setScores} />
-      <div className="field"><span>💪 จุดเด่น (เลือกได้สูงสุด 4)</span><Chips options={strengthTags} value={strengths} onChange={setStrengths} tone="good" /></div>
-      <div className="field"><span>🌱 ควรพัฒนา (เลือกได้สูงสุด 4)</span><Chips options={improveTags} value={improves} onChange={setImproves} tone="warn" /></div>
-      <label className="field">ชอบตรงไหนเป็นพิเศษ (ไม่บังคับ)<textarea rows={2} maxLength={240} value={good} onChange={e => setGood(e.target.value)} placeholder="เช่น คำถามเรื่องค่าเทอมลูกทำให้ลูกค้าคิดตาม" /></label>
-      <label className="field">คำแนะนำ (ไม่บังคับ)<textarea rows={2} maxLength={240} value={tip} onChange={e => setTip(e.target.value)} placeholder="เช่น ลองให้ลูกค้าพูดประโยชน์เองใน N" /></label>
-      <button type="button" className="btn btn-primary btn-lg btn-block" disabled={busy || !ok} onClick={submit}>{ok ? 'ส่ง Feedback' : 'ให้คะแนนให้ครบ 5 ข้อ'} <ArrowRight size={20} /></button>
-      <p className="muted small center">ไม่ระบุชื่อผู้ให้ Feedback บนจอ</p>
+      <ScorePicker value={scores} onChange={setScores} list={showtimeCriteria} highlightMissing={nudge} />
+      <details className="disclosure" open={strengths.length + improves.length > 0 || Boolean(good || tip)}>
+        <summary>เพิ่มความเห็น (ไม่บังคับ)</summary>
+        <div className="field"><span>💪 จุดเด่น (เลือกได้สูงสุด 4)</span><Chips options={strengthTags} value={strengths} onChange={setStrengths} tone="good" /></div>
+        <div className="field"><span>🌱 ควรพัฒนา (เลือกได้สูงสุด 4)</span><Chips options={improveTags} value={improves} onChange={setImproves} tone="warn" /></div>
+        <label className="field">ชอบตรงไหนเป็นพิเศษ<textarea rows={2} maxLength={240} value={good} onChange={e => setGood(e.target.value)} placeholder="เช่น คำถามเรื่องค่าเทอมลูกทำให้ลูกค้าคิดตาม" /></label>
+        <label className="field">คำแนะนำ<textarea rows={2} maxLength={240} value={tip} onChange={e => setTip(e.target.value)} placeholder="เช่น ลองให้ลูกค้าพูดประโยชน์เองใน N" /></label>
+      </details>
+      <p className="muted small center">🔒 ไม่แสดงชื่อผู้ให้ Feedback บนจอ</p>
+    </div>
+    <div className="dock">
+      <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={trySubmit}>{done < total ? `ให้คะแนนแล้ว ${done}/${total}` : 'ส่ง Feedback'} <ArrowRight size={20} /></button>
+    </div>
+  </section>;
+}
+
+function Postit({ p, me, now: serverNow, onError }: { p: PostitView; me: Me; now: number; onError: (e: unknown) => void }) {
+  const now = useClock(serverNow, 500);
+  const [text, setText] = useState('');
+  const [sent, setSent] = useStored<{ id: string; text: string }>('spin-class-note');
+  const [busy, setBusy] = useState(false);
+  const s = stageOf(p.stage);
+  const mine = sent?.id === p.id ? sent.text : null;
+  const left = p.endsAt - now;
+  async function submit() {
+    setBusy(true);
+    try { await api('/api/class', { action: 'note', activityId: p.id, text }, me.token); setSent({ id: p.id, text: text.trim() }); }
+    catch (e) { onError(e); }
+    finally { setBusy(false); }
+  }
+  const head = <div className="role-hero postit-hero" style={{ '--c': s.color } as React.CSSProperties}>
+    <span>#กิจกรรม Post-it · {s.name}</span>
+    <h1>{postit[p.stage].prompt}</h1>
+    {p.scenarioTitle && <p>ลูกค้า: <b>{p.scenarioTitle}</b> — {p.scenarioBrief}</p>}
+  </div>;
+  if (p.phase === 'wall') return <section className="narrow">
+    {head}
+    <div className="card wait-card"><span className="eyebrow">ดูกระดาน Post-it บนจอหน้าห้อง</span>{mine && <p className="note note-mine">“{mine}”</p>}</div>
+  </section>;
+  return <section className="narrow">
+    {head}
+    <div className="quiz-head"><span>เหลือเวลา</span><b className={`postit-timer ${left < 30_000 ? 'low' : ''}`}>{left > 0 ? `${Math.floor(left / 60000)}:${String(Math.floor(left / 1000) % 60).padStart(2, '0')}` : 'หมดเวลา'}</b></div>
+    <div className="card">
+      <div className="stage-hint" style={{ '--c': s.color } as React.CSSProperties}><StageBadge k={s.key} /><div><b>{s.meaning}</b><span>{s.goal}</span></div></div>
+      {mine && <p className="note note-mine">ส่งแล้ว: “{mine}”</p>}
+      <label className="field">{mine ? 'แก้ไขคำถามของคุณ' : 'คำถามของคุณ (1 คำถาม)'}
+        <textarea className="postit-input" rows={4} maxLength={200} value={text} onChange={e => setText(e.target.value)} placeholder={`“${s.examples[0]}”`} />
+      </label>
+      <button type="button" className="btn btn-primary btn-lg btn-block" disabled={busy || text.trim().length < 5 || left < -5000} onClick={submit}>{mine ? 'ส่งใหม่แทนอันเดิม' : 'แปะ Post-it'} <ArrowRight size={20} /></button>
+      <p className="muted small center">Post-it จะขึ้นจอพร้อมกันเมื่อผู้สอนเปิดกระดาน</p>
     </div>
   </section>;
 }

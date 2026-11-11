@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { GameError } from './game.ts';
 import { quizBank } from './quiz-bank.ts';
 import { personas } from './personas.ts';
-import { improveTags, strengthTags, type StageKey } from '../spin.ts';
+import { improveTags, showtimeCriteria, strengthTags, type StageKey } from '../spin.ts';
 
 export const choices: StageKey[] = ['S', 'P', 'I', 'N'];
 export const classLifetime = 10 * 3600_000;
@@ -27,16 +27,26 @@ export type FeedbackSummary = {
 };
 export type FeedbackActivity = {
   kind: 'feedback'; id: string; phase: 'roleplay' | 'voting' | 'results';
-  advisor: string; customer: string; scenario: number | null;
+  advisor: string; customer: string; scenario: number | null; duration: number;
   startedAt: number; endedAt: number | null; summary: FeedbackSummary | null;
 };
+// Post-it activity from the deck: everyone writes one question for a stage, then the wall is revealed.
+export type Note = { text: string; name: string; star: boolean };
+export type PostitActivity = {
+  kind: 'postit'; id: string; phase: 'writing' | 'wall'; stage: StageKey; scenario: number | null;
+  startedAt: number; endsAt: number; notes: Note[];
+};
+export type RecapActivity = { kind: 'recap'; id: string };
+export type ShowtimeResult = { id: string; advisor: string; customer: string; scenario: number | null; overall: number | null; criteria: (number | null)[]; count: number };
 export type ClassState = {
   id: string; startedAt: number; expiresAt: number;
-  activity: QuizActivity | FeedbackActivity | null;
+  activity: QuizActivity | FeedbackActivity | PostitActivity | RecapActivity | null;
+  showtime?: ShowtimeResult[];
 };
 
 export type Answer = { pid: string; name: string; choice: StageKey; ms: number };
 export type Ballot = { scores: number[]; strengths: string[]; improves: string[]; good: string; tip: string };
+export const ballotCriteria = showtimeCriteria.length;
 
 const bad = (message: string, status = 409): never => { throw new GameError(message, status); };
 const text = (v: unknown, n: number) => typeof v === 'string' ? v.replace(/\s+/g, ' ').trim().slice(0, n) : '';
@@ -99,8 +109,8 @@ export function makeBallot(activity: FeedbackActivity | null, b: Record<string, 
   if (activity!.phase === 'roleplay') bad('ยังไม่เปิดรับ Feedback รอให้จบ Role Play ก่อน');
   if (activity!.phase === 'results') bad('ปิดรับ Feedback แล้ว');
   const scores = b.scores;
-  if (!Array.isArray(scores) || scores.length !== 5 || !scores.every(s => Number.isInteger(s) && s >= 1 && s <= 5)) {
-    bad('กรุณาให้คะแนน 1–5 ครบทั้ง 5 ข้อ', 400);
+  if (!Array.isArray(scores) || scores.length !== ballotCriteria || !scores.every(s => Number.isInteger(s) && s >= 1 && s <= 5)) {
+    bad(`กรุณาให้คะแนน 1–5 ครบทั้ง ${ballotCriteria} ข้อ`, 400);
   }
   const pick = (v: unknown, allowed: string[]) => Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && allowed.includes(x)))].slice(0, 4) : [];
   return {
@@ -112,7 +122,7 @@ export function makeBallot(activity: FeedbackActivity | null, b: Record<string, 
 export function summarizeFeedback(ballots: Ballot[]): FeedbackSummary {
   const count = ballots.length;
   const avg = (xs: number[]) => xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length * 10) / 10 : null;
-  const criteria = [0, 1, 2, 3, 4].map(i => avg(ballots.map(b => b.scores[i])));
+  const criteria = Array.from({ length: ballotCriteria }, (_, i) => avg(ballots.map(b => b.scores[i]).filter(x => typeof x === 'number')));
   const tally = (key: 'strengths' | 'improves') => {
     const m = new Map<string, number>();
     for (const b of ballots) for (const t of b[key]) m.set(t, (m.get(t) ?? 0) + 1);
@@ -125,22 +135,45 @@ export function summarizeFeedback(ballots: Ballot[]): FeedbackSummary {
   };
 }
 
+// Closing a Show Time pair records its result so the trainer can compare all pairs at the end.
+export function closeFeedback(state: ClassState, summary: FeedbackSummary): ClassState {
+  const a = state.activity;
+  if (a?.kind !== 'feedback') return bad('ไม่มีรอบ Feedback');
+  const entry: ShowtimeResult = { id: a.id, advisor: a.advisor, customer: a.customer, scenario: a.scenario, overall: summary.overall, criteria: summary.criteria, count: summary.count };
+  return {
+    ...state, activity: { ...a, phase: 'results', summary },
+    showtime: [...(state.showtime ?? []).filter(x => x.id !== a.id), entry].slice(-12),
+  };
+}
+
+export function makeNote(activity: PostitActivity | null, b: Record<string, unknown>, now = Date.now()) {
+  if (!activity || activity.kind !== 'postit') bad('ตอนนี้ไม่มีกิจกรรม Post-it');
+  if (activity!.id !== b.activityId) bad('กิจกรรมเปลี่ยนแล้ว กรุณารีเฟรช');
+  if (activity!.phase !== 'writing' || now > activity!.endsAt + 5000) bad('หมดเวลาเขียน Post-it แล้ว');
+  const t = text(b.text, 200);
+  if (t.length < 5) bad('เขียนคำถามอย่างน้อย 5 ตัวอักษร', 400);
+  return t;
+}
+
 // Admin actions that don't need extra data. Reveal / close are finished in the API route with stored answers.
 export function controlClass(state: ClassState, b: Record<string, unknown>, now = Date.now()): ClassState {
   const s = structuredClone(state);
   const a = s.activity;
   if (b.action !== 'new-class' && b.activityId !== undefined && b.activityId !== (a?.id ?? null)) bad('หน้าจอไม่เป็นปัจจุบัน กรุณาลองอีกครั้ง');
   s.expiresAt = Math.max(s.expiresAt, now + classLifetime / 2);
+  const id = () => randomUUID().slice(0, 8);
+  const scenarioOf = (v: unknown) => { const n = Number(v); return Number.isInteger(n) && n >= 0 && n < personas.length ? n : null; };
   switch (b.action) {
     case 'new-class':
       return newClass(now);
     case 'quiz-setup': {
-      const count = Math.min(Math.max(Math.round(Number(b.count) || 10), 3), quizBank.length);
+      const count = Math.min(Math.max(Math.round(Number(b.count) || 10), 3), 20, quizBank.length);
       const timeLimit = [10, 15, 20, 30].includes(Number(b.timeLimit)) ? Number(b.timeLimit) : 20;
-      s.activity = {
-        kind: 'quiz', id: randomUUID().slice(0, 8), phase: 'lobby', timeLimit, index: -1,
-        order: shuffle(quizBank.map(q => q.id)).slice(0, count), openedAt: null, closesAt: null, scores: {}, reveal: null,
-      };
+      // Keep the S/P/I/N mix balanced whatever the count.
+      const byStage = choices.map(k => shuffle(quizBank.filter(q => q.answer === k).map(q => q.id)));
+      const order: number[] = [];
+      for (let i = 0; order.length < count; i++) { const pool = byStage[i % 4]; const next = pool.shift(); if (next !== undefined) order.push(next); }
+      s.activity = { kind: 'quiz', id: id(), phase: 'lobby', timeLimit, index: -1, order: shuffle(order), openedAt: null, closesAt: null, scores: {}, reveal: null };
       return s;
     }
     case 'quiz-open': {
@@ -156,12 +189,8 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
     case 'feedback-start': {
       const advisor = text(b.advisor, 40), customer = text(b.customer, 40);
       if (!advisor) return bad('กรุณาใส่ชื่อผู้รับบทตัวแทน', 400);
-      const scenario = Number(b.scenario);
-      s.activity = {
-        kind: 'feedback', id: randomUUID().slice(0, 8), phase: 'roleplay', advisor, customer,
-        scenario: Number.isInteger(scenario) && scenario >= 0 && scenario < personas.length ? scenario : null,
-        startedAt: now, endedAt: null, summary: null,
-      };
+      const minutes = [5, 8, 10, 12, 15].includes(Number(b.minutes)) ? Number(b.minutes) : 10;
+      s.activity = { kind: 'feedback', id: id(), phase: 'roleplay', advisor, customer, scenario: scenarioOf(b.scenario), duration: minutes * 60, startedAt: now, endedAt: null, summary: null };
       return s;
     }
     case 'feedback-end':
@@ -172,6 +201,23 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
       if (a?.kind !== 'feedback' || a.phase !== 'results') return bad('ยังไม่ได้ปิดรับ Feedback');
       Object.assign(a, { phase: 'voting', summary: null });
       return s;
+    case 'postit-start': {
+      const stage = choices.includes(b.stage as StageKey) ? b.stage as StageKey : 'S';
+      const minutes = [2, 3, 5].includes(Number(b.minutes)) ? Number(b.minutes) : 3;
+      s.activity = { kind: 'postit', id: id(), phase: 'writing', stage, scenario: scenarioOf(b.scenario), startedAt: now, endsAt: now + minutes * 60_000, notes: [] };
+      return s;
+    }
+    case 'postit-star': {
+      if (a?.kind !== 'postit' || a.phase !== 'wall') return bad('ยังไม่ได้เปิดกระดาน Post-it');
+      const i = Number(b.index);
+      if (!Number.isInteger(i) || !a.notes[i]) return bad('ไม่พบ Post-it นี้', 400);
+      a.notes[i].star = !a.notes[i].star;
+      return s;
+    }
+    case 'recap':
+      if (!s.showtime?.length) return bad('ยังไม่มีผล Show Time ให้สรุป');
+      s.activity = { kind: 'recap', id: id() };
+      return s;
     case 'clear':
       s.activity = null;
       return s;
@@ -179,14 +225,22 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
   return bad('ไม่รู้จักคำสั่งนี้', 400);
 }
 
-// What every screen is allowed to see. The answer is hidden while a question is open.
+// What every screen is allowed to see. The quiz answer is hidden while a question is open,
+// and Post-it notes stay hidden until the trainer reveals the wall.
 export function publicState(state: ClassState, people: number, now = Date.now(), answered = 0, ballots = 0) {
   const a = state.activity;
-  const base = { id: state.id, now, people };
+  const showtime = [...(state.showtime ?? [])].sort((x, y) => (y.overall ?? 0) - (x.overall ?? 0))
+    .map(x => ({ ...x, scenarioTitle: x.scenario === null ? null : personas[x.scenario].title }));
+  const base = { id: state.id, now, people, showtime };
   if (!a) return { ...base, activity: null };
+  if (a.kind === 'recap') return { ...base, activity: a };
   if (a.kind === 'feedback') {
     const p = a.scenario === null ? null : personas[a.scenario];
     return { ...base, activity: { ...a, scenarioTitle: p?.title ?? null, ballots } };
+  }
+  if (a.kind === 'postit') {
+    const p = a.scenario === null ? null : personas[a.scenario];
+    return { ...base, activity: { ...a, notes: a.phase === 'wall' ? a.notes : [], written: a.phase === 'wall' ? a.notes.length : answered, scenarioTitle: p?.title ?? null, scenarioBrief: p?.brief ?? null } };
   }
   const item = a.index >= 0 ? quizBank.find(q => q.id === a.order[a.index]) : undefined;
   const board = leaderboard(a.scores);

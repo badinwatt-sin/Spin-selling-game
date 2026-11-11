@@ -1,7 +1,8 @@
 // Pair role play: pure room logic (no I/O), so it can be unit-tested with node --test.
 import { randomInt, randomUUID } from 'node:crypto';
 import { personas } from './personas.ts';
-import { reactionByKey, type ReactionKey } from '../spin.ts';
+import { personaExtra } from './persona-extra.ts';
+import { reactionByKey, wallLevel, type ReactionKey } from '../spin.ts';
 
 export class GameError extends Error {
   status: number;
@@ -13,7 +14,7 @@ export type Reaction = { k: ReactionKey; at: number; stage: number };
 export type Report = {
   round: number; advisorId: number; advisor: string; customer: string; scenario: string;
   scores: number[]; comment: string; reactions: Partial<Record<ReactionKey, number>>;
-  stageReached: number; seconds: number; createdAt: number;
+  stageReached: number; seconds: number; createdAt: number; wall: number;
 };
 export type Phase = 'lobby' | 'play' | 'feedback' | 'report';
 export type Room = {
@@ -124,7 +125,7 @@ export function transition(room: Room, b: Record<string, unknown>, token: string
       r.reports.push({
         round: r.round, advisorId: r.advisor, advisor: r.players[r.advisor].name, customer: r.players[1 - r.advisor].name,
         scenario: personas[r.scenario].title, scores: scores as number[], comment: clean(b.comment, 400), reactions: counts,
-        stageReached: r.maxStage, seconds: Math.max(0, Math.round(((r.ends ?? now) - (r.startedAt ?? now)) / 1000)), createdAt: now,
+        wall: wallLevel(r.reactions), stageReached: r.maxStage, seconds: Math.max(0, Math.round(((r.ends ?? now) - (r.startedAt ?? now)) / 1000)), createdAt: now,
       });
       r.phase = 'report';
       return done();
@@ -151,6 +152,7 @@ export function view(r: Room, token: string, now = Date.now()) {
   const me = member(r, token, now);
   const role = me === r.advisor ? 'advisor' : 'customer';
   const p = personas[r.scenario];
+  const x = personaExtra[r.scenario];
   return {
     revision: r.revision, code: r.code, now, me, role,
     players: r.players.map(x => ({ name: x.name })),
@@ -158,9 +160,10 @@ export function view(r: Room, token: string, now = Date.now()) {
     startedAt: r.startedAt, ends: r.ends, duration: r.duration,
     scenario: { id: p.id, title: p.title, en: p.en, brief: p.brief },
     ...(role === 'advisor'
-      ? { lines: p.lines }
-      : { persona: { facts: p.facts, attitude: p.attitude, objection: p.objection, play: p.play } }),
+      ? { lines: p.lines.map((l, i) => [...l, ...x.moreLines[i]]), objections: x.objections, presentAngle: x.presentAngle }
+      : { persona: { facts: p.facts, attitude: p.attitude, objection: p.objection, play: p.play, hiddenNeed: x.hiddenNeed, wallOpens: x.wallOpens, wallCloses: x.wallCloses, objections: x.objections.map(o => o.line) } }),
     reactions: r.reactions.slice(-40),
+    wall: wallLevel(r.reactions),
     reports: r.reports.filter(x => x.advisorId === me),
   };
 }

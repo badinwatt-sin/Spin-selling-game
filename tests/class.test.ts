@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { controlClass, newClass, points, scoreQuestion, leaderboard, makeBallot, summarizeFeedback, publicState, type QuizActivity, type FeedbackActivity } from '../lib/server/classroom.ts';
+import { closeFeedback, controlClass, newClass, points, scoreQuestion, leaderboard, makeBallot, makeNote, summarizeFeedback, publicState, type QuizActivity, type FeedbackActivity, type PostitActivity } from '../lib/server/classroom.ts';
 import { quizBank } from '../lib/server/quiz-bank.ts';
 
 test('quiz bank is balanced and complete', () => {
-  assert.equal(quizBank.length, 20);
-  for (const k of ['S', 'P', 'I', 'N']) assert.equal(quizBank.filter(q => q.answer === k).length, 5);
-  assert.equal(new Set(quizBank.map(q => q.id)).size, 20);
+  assert.equal(quizBank.length, 40);
+  for (const k of ['S', 'P', 'I', 'N']) assert.equal(quizBank.filter(q => q.answer === k).length, 10);
+  assert.equal(new Set(quizBank.map(q => q.id)).size, 40);
+  for (const q of quizBank) assert.ok(q.line.length > 10 && q.why.length > 5, `item ${q.id} complete`);
 });
 
 test('faster correct answers score more; wrong scores zero', () => {
@@ -18,6 +19,8 @@ test('faster correct answers score more; wrong scores zero', () => {
 
 test('quiz flow: setup, hidden answer, scoring, leaderboard, final', () => {
   let s = newClass(0);
+  const eight = controlClass(s, { action: 'quiz-setup', count: 8, timeLimit: 20 }, 1).activity as QuizActivity;
+  for (const k of ['S', 'P', 'I', 'N']) assert.equal(eight.order.filter(id => quizBank.find(q => q.id === id)!.answer === k).length, 2, 'balanced mix');
   s = controlClass(s, { action: 'quiz-setup', count: 5, timeLimit: 20 }, 1);
   const quiz = s.activity as QuizActivity;
   assert.equal(quiz.order.length, 5);
@@ -51,15 +54,36 @@ test('peer feedback: only while voting, summary averages and tags', () => {
   assert.throws(() => controlClass(s, { action: 'feedback-start', advisor: '' }, 1), /ตัวแทน/);
   s = controlClass(s, { action: 'feedback-start', advisor: 'ต้น', customer: 'ฝน', scenario: 4 }, 1);
   const f = s.activity as FeedbackActivity;
-  const vote = { activityId: f.id, scores: [5, 4, 3, 4, 5], strengths: ['ตั้งใจฟัง', 'hack'], improves: ['ขาด Implication'], good: 'ถามดี', tip: '' };
+  const vote = { activityId: f.id, scores: [5, 4, 3, 4, 5, 4], strengths: ['ตั้งใจฟัง', 'hack'], improves: ['ขาด Implication'], good: 'ถามดี', tip: '' };
   assert.throws(() => makeBallot(f, vote), /ยังไม่เปิด/);
   s = controlClass(s, { action: 'feedback-end', activityId: f.id }, 2);
   const ballot = makeBallot(s.activity as FeedbackActivity, vote);
   assert.deepEqual(ballot.strengths, ['ตั้งใจฟัง']);
-  assert.throws(() => makeBallot(s.activity as FeedbackActivity, { ...vote, scores: [6, 4, 3, 4, 4] }), /1–5/);
-  const sum = summarizeFeedback([ballot, { ...ballot, scores: [3, 4, 5, 4, 3], strengths: [], good: '', tip: '' }]);
-  assert.equal(sum.count, 2); assert.deepEqual(sum.criteria, [4, 4, 4, 4, 4]); assert.equal(sum.overall, 4);
+  assert.throws(() => makeBallot(s.activity as FeedbackActivity, { ...vote, scores: [6, 4, 3, 4, 4, 4] }), /1–5/);
+  assert.throws(() => makeBallot(s.activity as FeedbackActivity, { ...vote, scores: [5, 4, 3, 4, 5] }), /6 ข้อ/);
+  const sum = summarizeFeedback([ballot, { ...ballot, scores: [3, 4, 5, 4, 3, 4], strengths: [], good: '', tip: '' }]);
+  assert.equal(sum.count, 2); assert.deepEqual(sum.criteria, [4, 4, 4, 4, 4, 4]); assert.equal(sum.overall, 4);
+  const closed = closeFeedback(s, sum);
+  assert.equal(closed.showtime!.length, 1); assert.equal(closed.showtime![0].overall, 4);
+  assert.equal(closeFeedback(closed, sum).showtime!.length, 1, 're-closing the same pair replaces its result');
+  const recap = controlClass(closed, { action: 'recap' }, 5);
+  assert.equal(recap.activity!.kind, 'recap');
   assert.deepEqual(sum.improves, [{ tag: 'ขาด Implication', count: 2 }]);
   assert.equal(sum.notes.length, 1);
   assert.throws(() => controlClass(s, { action: 'feedback-end', activityId: 'old' }, 3), /ไม่เป็นปัจจุบัน/);
+});
+
+test('post-it: notes hidden until the wall is revealed, stars toggle', () => {
+  let s = controlClass(newClass(0), { action: 'postit-start', stage: 'I', minutes: 3, scenario: 1 }, 1000);
+  const p = s.activity as PostitActivity;
+  assert.equal(p.endsAt, 1000 + 180_000);
+  assert.equal(makeNote(p, { activityId: p.id, text: '  ถ้าคุณต้องพักรักษาตัวนาน ใครจะดูแลคุณพ่อคุณแม่ครับ ' }, 2000), 'ถ้าคุณต้องพักรักษาตัวนาน ใครจะดูแลคุณพ่อคุณแม่ครับ');
+  assert.throws(() => makeNote(p, { activityId: p.id, text: 'สั้น' }, 2000), /อย่างน้อย/);
+  assert.throws(() => makeNote(p, { activityId: p.id, text: 'คำถามที่ส่งช้าเกินไป' }, 1000 + 190_000), /หมดเวลา/);
+  s = { ...s, activity: { ...p, notes: [{ name: 'ต้น', text: 'คำถามดีมาก', star: false }] } };
+  assert.equal((publicState(s, 1, 2000) as any).activity.notes.length, 0, 'hidden while writing');
+  s = { ...s, activity: { ...(s.activity as PostitActivity), phase: 'wall' } };
+  s = controlClass(s, { action: 'postit-star', index: 0 }, 3000);
+  assert.equal((s.activity as PostitActivity).notes[0].star, true);
+  assert.equal((publicState(s, 1, 3000) as any).activity.notes.length, 1);
 });

@@ -1,4 +1,4 @@
-import { ArrowRight, Presentation, Radio, Users } from 'lucide-react';
+import { ArrowRight, BookOpen, Presentation, Radio, Users } from 'lucide-react';
 import { Brand, StageBadge } from '@/components/ui';
 import { stages } from '@/lib/spin';
 import LiveBanner from './live-banner';
@@ -15,6 +15,11 @@ export default function Home() {
     </section>
 
     <section className="modes">
+      <a className="mode mode-learn" href="/learn">
+        <span className="mode-icon"><BookOpen size={28} /></span>
+        <div><h2>เรียนรู้ SPIN</h2><p>กำแพงลูกค้า 4 ขั้น SPIN ตัวอย่างประโยค ประโยคเชื่อม และข้อผิดพลาดที่พบบ่อย สรุปจากบทเรียน</p></div>
+        <span className="mode-go">อ่านสรุป <ArrowRight size={18} /></span>
+      </a>
       <a className="mode mode-pair" href="/pair">
         <span className="mode-icon"><Users size={28} /></span>
         <div><h2>Role Play เป็นคู่</h2><p>สลับกันเป็นตัวแทนและลูกค้าตามการ์ด ตัวแทนมีตัวอย่างประโยคทุกขั้น ลูกค้ากดบอกความรู้สึกได้ระหว่างคุย</p></div>
@@ -22,12 +27,12 @@ export default function Home() {
       </a>
       <a className="mode mode-class" href="/class">
         <span className="mode-icon"><Radio size={28} /></span>
-        <div><h2>กิจกรรมทั้งคลาส</h2><p>เกมทาย S/P/I/N แข่งกันตอบเร็ว และให้ Feedback คู่ที่ Role Play หน้าห้อง</p></div>
+        <div><h2>กิจกรรมทั้งคลาส</h2><p>Post-it คิดคำถาม เกมทาย S/P/I/N แข่งตอบเร็ว และ SHOW TIME ให้ Feedback คู่หน้าห้อง</p></div>
         <span className="mode-go">เข้าร่วม <ArrowRight size={18} /></span>
       </a>
       <a className="mode mode-admin" href="/class/admin">
         <span className="mode-icon"><Presentation size={28} /></span>
-        <div><h2>ผู้สอน · จอ Live</h2><p>ควบคุมเกมและกิจกรรม Feedback แล้วเปิดจอ Live ขึ้นโปรเจกเตอร์</p></div>
+        <div><h2>ผู้สอน · จอ Live</h2><p>ควบคุม Post-it เกมทาย SPIN และ SHOW TIME แล้วเปิดจอ Live ขึ้นโปรเจกเตอร์</p></div>
         <span className="mode-go">ไปหน้าผู้สอน <ArrowRight size={18} /></span>
       </a>
     </section>

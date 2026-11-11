@@ -37,9 +37,10 @@ export function StageBadge({ k, size = 'md' }: { k: StageKey; size?: 'sm' | 'md'
   return <span className={`stage-badge stage-badge-${size}`} style={{ background: s.color }}>{k}</span>;
 }
 
-export function ScorePicker({ value, onChange }: { value: number[]; onChange: (v: number[]) => void }) {
+type Criteria = typeof criteria;
+export function ScorePicker({ value, onChange, list = criteria, highlightMissing }: { value: number[]; onChange: (v: number[]) => void; list?: Criteria; highlightMissing?: boolean }) {
   return <div className="score-list">
-    {criteria.map((c, i) => <fieldset key={c.key} className="score-row">
+    {list.map((c, i) => <fieldset key={c.key} className={`score-row ${highlightMissing && !value[i] ? 'missing' : ''}`}>
       <legend><span className="score-key">{c.key}</span> <b>{c.label}</b> <small>{c.hint}</small></legend>
       <div className="score-buttons">
         {[1, 2, 3, 4, 5].map(n => <button type="button" key={n} aria-pressed={value[i] === n}
@@ -51,11 +52,11 @@ export function ScorePicker({ value, onChange }: { value: number[]; onChange: (v
   </div>;
 }
 
-export function Bars({ values, max = 5 }: { values: (number | null)[]; max?: number }) {
+export function Bars({ values, max = 5, list = criteria }: { values: (number | null)[]; max?: number; list?: Criteria }) {
   return <div className="bars">
-    {criteria.map((c, i) => <div className="bar-row" key={c.key}>
+    {list.map((c, i) => <div className="bar-row" key={c.key}>
       <span className="bar-label"><b>{c.key}</b> {c.label}</span>
-      <span className="bar-track"><span className="bar-fill" style={{ width: `${((values[i] ?? 0) / max) * 100}%`, background: i < 4 ? stages[i].color : '#7a5cf0' }} /></span>
+      <span className="bar-track"><span className="bar-fill" style={{ width: `${((values[i] ?? 0) / max) * 100}%`, background: i < 4 ? stages[i].color : i === 4 ? '#7a5cf0' : '#e5a400' }} /></span>
       <span className="bar-value">{values[i] ?? '–'}</span>
     </div>)}
   </div>;
@@ -86,4 +87,17 @@ export function useOrigin() {
 export function Notice({ error, onClose }: { error?: string; onClose?: () => void }) {
   if (!error) return null;
   return <div className="notice" role="alert">{error}{onClose && <button type="button" onClick={onClose} aria-label="ปิด">×</button>}</div>;
+}
+
+// กำแพงลูกค้า: a brick wall that drops as the customer opens up.
+export function Wall({ level, compact }: { level: number; compact?: boolean }) {
+  const rows = 5, filled = Math.round((level / 100) * rows);
+  const tone = level <= 45 ? 'good' : level <= 70 ? 'neutral' : 'warn';
+  const label = level <= 20 ? 'เปิดใจแล้ว' : level <= 45 ? 'เริ่มเปิดใจ' : level <= 70 ? 'ยังระวังตัว' : 'กำแพงสูง';
+  return <div className={`wall wall-${tone} ${compact ? 'wall-compact' : ''}`} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={level} aria-label={`กำแพงลูกค้า ${level}%`}>
+    <div className="wall-bricks" aria-hidden="true">
+      {Array.from({ length: rows }, (_, i) => <span key={i} className={rows - i <= filled ? 'on' : ''} />)}
+    </div>
+    <div className="wall-text"><small>กำแพงลูกค้า</small><b>{label}</b>{!compact && <em>{level}%</em>}</div>
+  </div>;
 }

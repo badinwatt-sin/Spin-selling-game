@@ -27,6 +27,10 @@ test('pair flow: roles, card privacy, back-and-forth SPIN, reactions, feedback, 
   r = transition(r, { action: 'react', kind: 'aha' }, b, 2000).room;
   assert.throws(() => transition(r, { action: 'react', kind: 'nope' }, b, 3000));
   assert.equal(view(r, a, 3000).reactions.length, 2);
+  assert.equal(view(r, a, 3000).wall, 80 + 2 - 10, 'worry outside I raises, aha lowers the wall');
+  assert.equal((view(r, a, 3000) as any).lines[0].length, 5, 'card lines + specialist lines');
+  assert.ok((view(r, b, 3000) as any).persona.hiddenNeed, 'customer gets the hidden need');
+  assert.equal((view(r, a, 3000) as any).persona, undefined);
   r = transition(r, { action: 'finish' }, a, 60_000).room;
   for (const scores of [[0, 5, 5, 5, 5], [5, 5, 5, 5, 6], [1, 2, 3], [2.5, 5, 5, 5, 5]]) {
     assert.throws(() => transition(r, { action: 'feedback', scores }, b, 61_000));
@@ -38,7 +42,7 @@ test('pair flow: roles, card privacy, back-and-forth SPIN, reactions, feedback, 
   assert.equal(view(r, b, 62_000).reports.length, 0, 'reports go only to the advisor');
   const rep = r.reports[0];
   assert.deepEqual(rep.reactions, { worried: 1, aha: 1 });
-  assert.equal(rep.stageReached, 2); assert.equal(rep.comment, 'ดีมาก');
+  assert.equal(rep.stageReached, 2); assert.equal(rep.comment, 'ดีมาก'); assert.equal(rep.wall, 72);
   r = transition(r, { action: 'next' }, b, 63_000).room;
   assert.equal(r.round, 2); assert.equal(r.advisor, 1); assert.notEqual(r.scenario, 2);
   assert.ok('lines' in view(r, b, 63_000), 'roles switched');

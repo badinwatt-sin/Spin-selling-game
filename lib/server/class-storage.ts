@@ -104,3 +104,20 @@ export async function readBallots(sid: string, aid: string) {
   }
   return out;
 }
+
+// Post-it notes: one per person per activity, editable until the trainer reveals the wall.
+export async function saveNote(sid: string, aid: string, pid: string, name: string, text: string) {
+  await store.write(`${base(sid)}n/${aid}/${pid}.json`, { name, text, at: Date.now() }, { overwrite: true });
+}
+export async function countNotes(sid: string, aid: string) {
+  return (await store.list(`${base(sid)}n/${aid}/`)).length;
+}
+export async function readNotes(sid: string, aid: string) {
+  const entries = await store.list(`${base(sid)}n/${aid}/`);
+  const out: { name: string; text: string; at: number }[] = [];
+  for (let i = 0; i < entries.length; i += 20) {
+    const batch = await Promise.all(entries.slice(i, i + 20).map(e => store.read<{ name: string; text: string; at: number }>(e.pathname)));
+    for (const b of batch) if (b) out.push(b.data);
+  }
+  return out.sort((a, b) => a.at - b.at);
+}

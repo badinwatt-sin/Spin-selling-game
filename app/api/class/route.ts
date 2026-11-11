@@ -1,10 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { GameError } from '@/lib/server/game';
-import { choices, controlClass, makeBallot, publicState, scoreQuestion, summarizeFeedback } from '@/lib/server/classroom';
+import { choices, closeFeedback, controlClass, makeBallot, makeNote, publicState, scoreQuestion, summarizeFeedback } from '@/lib/server/classroom';
 import {
-  cached, countBallots, countPlayers, forget, listAnswers, playerToken, readBallots, readPlayer, readState,
-  registerPlayer, saveAnswer, saveBallot, secret, writeState,
+  cached, countBallots, countNotes, countPlayers, forget, listAnswers, playerToken, readBallots, readNotes, readPlayer, readState,
+  registerPlayer, saveAnswer, saveBallot, saveNote, secret, writeState,
 } from '@/lib/server/class-storage';
 import type { StageKey } from '@/lib/spin';
 
@@ -39,6 +39,7 @@ async function snapshot(screen: boolean, fresh = false) {
     people = await cached(`p:${state.id}`, fresh ? 0 : 1500, () => countPlayers(state.id));
     if (a?.kind === 'quiz' && a.phase === 'question') answered = (await listAnswers(state.id, a.id, a.index)).length;
     if (a?.kind === 'feedback' && a.phase !== 'roleplay') ballots = await countBallots(state.id, a.id);
+    if (a?.kind === 'postit' && a.phase === 'writing') answered = await countNotes(state.id, a.id);
   }
   return publicState(state, people, now, answered, ballots);
 }
@@ -107,6 +108,15 @@ export async function POST(req: NextRequest) {
       return reply({ ok: true });
     }
 
+    if (b.action === 'note') {
+      const { state } = await cached('state', 500, () => readState(now));
+      const me = readPlayer(bearer(req), state.id);
+      const a = state.activity;
+      const text = makeNote(a?.kind === 'postit' ? a : null, b, now);
+      await saveNote(state.id, a!.id, me.pid, me.name, text);
+      return reply({ ok: true });
+    }
+
     // Everything below is for the trainer.
     if (!isAdmin(req)) return reply({ error: 'กรุณาเข้าสู่ระบบผู้สอน' }, 401);
     const { state, etag } = await readState(now);
@@ -117,7 +127,11 @@ export async function POST(req: NextRequest) {
       next = { ...state, activity: scoreQuestion(a, await listAnswers(state.id, a.id, a.index)) };
     } else if (b.action === 'feedback-close') {
       if (a?.kind !== 'feedback' || a.phase !== 'voting' || b.activityId !== a.id) return reply({ error: 'ไม่มีรอบที่เปิดรับ Feedback' }, 409);
-      next = { ...state, activity: { ...a, phase: 'results', summary: summarizeFeedback(await readBallots(state.id, a.id)) } };
+      next = closeFeedback(state, summarizeFeedback(await readBallots(state.id, a.id)));
+    } else if (b.action === 'postit-reveal') {
+      if (a?.kind !== 'postit' || a.phase !== 'writing' || b.activityId !== a.id) return reply({ error: 'ไม่มีกิจกรรม Post-it ที่เปิดอยู่' }, 409);
+      const notes = (await readNotes(state.id, a.id)).map(n => ({ name: n.name, text: n.text, star: false }));
+      next = { ...state, activity: { ...a, phase: 'wall', notes } };
     } else {
       next = controlClass(state, b, now);
     }
