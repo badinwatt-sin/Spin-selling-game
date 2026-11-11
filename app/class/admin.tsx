@@ -6,6 +6,7 @@ import { Bars, Brand, Notice, Qr, StageBadge, useOrigin } from '@/components/ui'
 import { showtimeCriteria, stages, type StageKey } from '@/lib/spin';
 import { postit, showtimeRubric } from '@/lib/content';
 import { Countdown, Podium, ShowtimeTable, stageOf, useClass, type ClassView, type FeedbackView, type PostitView, type QuizView } from './shared';
+import { Ico, Sticker } from '@/components/icons';
 
 const scenarioNames = ['แม่บ้าน', 'ข้าราชการ', 'พ่อค้า แม่ค้า', 'พนักงานบริษัทเอกชน', 'แพทย์ พยาบาล', 'นักธุรกิจ'];
 type Act = (b: Record<string, unknown>) => Promise<void>;
@@ -61,7 +62,7 @@ export default function Admin() {
         {a?.kind === 'quiz' && <QuizControl q={a} now={data.now} act={act} busy={busy} />}
         {a?.kind === 'feedback' && <FeedbackControl f={a} people={data.people} now={data.now} act={act} busy={busy} />}
         {a?.kind === 'postit' && <PostitControl p={a} people={data.people} now={data.now} act={act} busy={busy} />}
-        {a?.kind === 'recap' && <><h1 className="admin-title">🏆 สรุป SHOW TIME ทุกคู่</h1><div className="card control"><ShowtimeTable rows={data.showtime} />
+        {a?.kind === 'recap' && <><h1 className="admin-title"><Ico name="trophy" /> สรุป SHOW TIME ทุกคู่</h1><div className="card control"><ShowtimeTable rows={data.showtime} />
           <button type="button" data-primary className="btn btn-primary btn-lg" disabled={busy} onClick={() => act({ action: 'clear' })}>กลับหน้าเลือกกิจกรรม <Key /></button></div></>}
       </section>
       <aside className="admin-side">
@@ -71,7 +72,7 @@ export default function Admin() {
           <b className="join-url">{origin.replace(/^https?:\/\//, '')}/class</b>
         </div>
         {a && <button type="button" className="btn btn-ghost btn-block" disabled={busy} onClick={() => confirm('ปิดกิจกรรมนี้และกลับไปหน้าเลือกกิจกรรม?') && act({ action: 'clear' })}><X size={18} /> ปิดกิจกรรมนี้</button>}
-        <p className="muted small">💡 กด <Key /> หรือ → เพื่อกดปุ่มหลักของหน้าจอ</p>
+        <p className="muted small"><Ico name="idea" /> กด <Key /> หรือ → เพื่อกดปุ่มหลักของหน้าจอ</p>
       </aside>
     </div>
     <details className="danger-zone">
@@ -117,7 +118,7 @@ function Start({ act, busy, data }: { act: Act; busy: boolean; data: ClassView }
     <p className="muted">ลำดับแนะนำตามบทเรียน: สอน 1 ขั้น → Post-it ขั้นนั้น → (ครบ 4 ขั้น) เกมทาย SPIN → ฝึกเป็นคู่ → SHOW TIME 3 คู่</p>
     <div className="activity-cards">
       <form className="card activity" onSubmit={e => { e.preventDefault(); act({ action: 'postit-start', stage, minutes: pMinutes, scenario: pScenario }); }}>
-        <span className="activity-icon">📝</span>
+        <Sticker name="note" tone="yellow" size={26} tilt={-6} />
         <h2>Post-it คิดคำถาม</h2>
         <p>ทุกคนเขียนคำถาม 1 ข้อสำหรับขั้นที่เลือก แล้วเปิดกระดานพร้อมกันบนจอ ผู้สอนติดดาวคำถามที่ดี</p>
         <div className="field">ขั้น
@@ -132,7 +133,7 @@ function Start({ act, busy, data }: { act: Act; busy: boolean; data: ClassView }
         <button className="btn btn-primary btn-lg btn-block" disabled={busy}><Play size={20} /> เริ่ม Post-it</button>
       </form>
       <form className="card activity" onSubmit={e => { e.preventDefault(); act({ action: 'quiz-setup', count, timeLimit: time }); }}>
-        <span className="activity-icon">🎯</span>
+        <Sticker name="target" tone="red" size={26} tilt={4} />
         <h2>เกมทาย SPIN</h2>
         <p>ขึ้นประโยคของตัวแทน ให้ทั้งห้องตอบว่าเป็น S / P / I / N ตอบถูกและเร็วได้คะแนนมาก สรุป 3 อันดับแรก (คลัง 40 ข้อ สุ่มแบบสมดุล)</p>
         <label className="field">จำนวนคำถาม: <b>{count} ข้อ</b>
@@ -144,7 +145,7 @@ function Start({ act, busy, data }: { act: Act; busy: boolean; data: ClassView }
         <button className="btn btn-primary btn-lg btn-block" disabled={busy}><Play size={20} /> เตรียมเกม ({count} ข้อ)</button>
       </form>
       <form className="card activity" onSubmit={e => { e.preventDefault(); act({ action: 'feedback-start', advisor, customer, scenario, minutes }); }}>
-        <span className="activity-icon">🎤</span>
+        <Sticker name="mic" tone="blue" size={26} tilt={-3} />
         <h2>SHOW TIME · Feedback คู่หน้าห้อง</h2>
         <p>SPIN + Present Solution 1 คู่หน้าห้อง ผู้สอนกดจบเอง แล้วทั้งห้องให้คะแนน “ตัวแทน” 6 ด้าน สรุปผลขึ้นจอ Live {done > 0 && <b>· เล่นไปแล้ว {done} คู่</b>}</p>
         <label className="field">ผู้รับบทตัวแทน (ผู้ถูกประเมิน)<input value={advisor} onChange={e => setAdvisor(e.target.value)} maxLength={40} required placeholder="เช่น ต้น" /></label>
@@ -173,7 +174,7 @@ function QuizControl({ q, now: serverNow, act, busy }: { q: QuizView; now: numbe
   }, [now, q.phase, q.closesAt, key, act, busy]);
   const last = q.index + 1 >= q.total;
   return <>
-    <h1 className="admin-title">🎯 เกมทาย SPIN <small>{q.total} ข้อ · ข้อละ {q.timeLimit} วินาที</small></h1>
+    <h1 className="admin-title"><Ico name="target" /> เกมทาย SPIN <small>{q.total} ข้อ · ข้อละ {q.timeLimit} วินาที</small></h1>
     {q.phase === 'lobby' && <div className="card control">
       <p>ให้ผู้เรียนสแกน QR เข้าร่วม แล้วเปิดจอ Live ขึ้นโปรเจกเตอร์</p>
       <button type="button" data-primary className="btn btn-primary btn-xl" disabled={busy} onClick={() => act({ action: 'quiz-open' })}><Play size={22} /> เปิดข้อที่ 1 <Key /></button>
@@ -225,9 +226,9 @@ function FeedbackControl({ f, people, now: serverNow, act, busy }: { f: Feedback
   const now = useClock(serverNow, 1000);
   const left = f.startedAt + f.duration * 1000 - now;
   return <>
-    <h1 className="admin-title">🎤 SHOW TIME · Feedback คู่หน้าห้อง</h1>
+    <h1 className="admin-title"><Ico name="mic" /> SHOW TIME · Feedback คู่หน้าห้อง</h1>
     <div className="card control">
-      <p className="pair-line"><b>🧑‍💼 {f.advisor}</b> (ตัวแทน){f.customer && <> × <b>🙋 {f.customer}</b></>}{f.scenarioTitle && <> · ลูกค้า{f.scenarioTitle}</>}</p>
+      <p className="pair-line"><b><Ico name="advisor" /> {f.advisor}</b> (ตัวแทน){f.customer && <> × <b><Ico name="customer" /> {f.customer}</b></>}{f.scenarioTitle && <> · ลูกค้า{f.scenarioTitle}</>}</p>
       {f.phase === 'roleplay' && <>
         <p className="big-stat"><b className={left < 0 ? 'over' : ''}>{left >= 0 ? mmss(left) : `+${mmss(-left)}`}</b> {left >= 0 ? 'เหลือเวลา' : 'เกินเวลา'}</p>
         <button type="button" data-primary className="btn btn-finish btn-xl" disabled={busy} onClick={() => act({ action: 'feedback-end' })}><Flag size={22} /> จบ Role Play · เปิดรับ Feedback <Key /></button>
@@ -243,7 +244,7 @@ function FeedbackControl({ f, people, now: serverNow, act, busy }: { f: Feedback
           <div className="tag-cloud good">{f.summary.strengths.map(t => <span key={t.tag}>{t.tag} <b>{t.count}</b></span>)}</div>
           <div className="tag-cloud warn">{f.summary.improves.map(t => <span key={t.tag}>{t.tag} <b>{t.count}</b></span>)}</div>
         </div>}
-        {f.summary.notes.length > 0 && <div className="notes notes-admin">{f.summary.notes.map((n, i) => <div key={i} className="note">{n.good && <p>👍 {n.good}</p>}{n.tip && <p>💡 {n.tip}</p>}</div>)}</div>}
+        {f.summary.notes.length > 0 && <div className="notes notes-admin">{f.summary.notes.map((n, i) => <div key={i} className="note">{n.good && <p><Ico name="like" /> {n.good}</p>}{n.tip && <p><Ico name="idea" /> {n.tip}</p>}</div>)}</div>}
         <div className="sticky-actions">
           <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => act({ action: 'feedback-reopen' })}>เปิดรับ Feedback เพิ่ม</button>
           <button type="button" data-primary className="btn btn-primary btn-lg" disabled={busy} onClick={() => act({ action: 'clear' })}>คู่ถัดไป <ArrowRight size={20} /> <Key /></button>
@@ -259,16 +260,16 @@ function PostitControl({ p, people, now: serverNow, act, busy }: { p: PostitView
   const s = stageOf(p.stage);
   const left = p.endsAt - now;
   return <>
-    <h1 className="admin-title">📝 Post-it · {s.name}</h1>
+    <h1 className="admin-title"><Ico name="note" /> Post-it · {s.name}</h1>
     <div className="card control">
       <p className="admin-quote">{postit[p.stage].prompt}</p>
       {p.scenarioTitle && <p>โจทย์ลูกค้า: <b>{p.scenarioTitle}</b> — {p.scenarioBrief}</p>}
-      <p className="mentor-hint">🧭 Mentor: {postit[p.stage].mentorHint}</p>
+      <p className="mentor-hint"><Ico name="compass" /> Mentor: {postit[p.stage].mentorHint}</p>
       {p.phase === 'writing' ? <>
         <p className="big-stat"><b>{p.written}</b> / {people} คนแปะแล้ว · {left > 0 ? `เหลือ ${mmss(left)}` : 'หมดเวลา'}</p>
         <button type="button" data-primary className="btn btn-primary btn-xl" disabled={busy} onClick={() => act({ action: 'postit-reveal' })}>เปิดกระดาน Post-it บนจอ <Key /></button>
       </> : <>
-        <p className="muted">แตะ ⭐ เพื่อติดดาวคำถามตัวอย่างที่ดี ดาวจะขึ้นบนจอทันที</p>
+        <p className="muted">แตะ <Ico name="star" /> เพื่อติดดาวคำถามตัวอย่างที่ดี ดาวจะขึ้นบนจอทันที</p>
         <div className="postit-wall postit-wall-admin">{p.notes.map((n, i) => <button type="button" key={i} className={`postit-note ${n.star ? 'star' : ''}`} style={{ '--c': s.color } as React.CSSProperties} disabled={busy} onClick={() => act({ action: 'postit-star', index: i })}>
           <span>{n.text}</span><small>{n.name}</small>{n.star ? <Star className="star-icon" size={18} fill="currentColor" /> : <Star className="star-icon off" size={18} />}</button>)}</div>
         <button type="button" data-primary className="btn btn-primary btn-lg" disabled={busy} onClick={() => act({ action: 'clear' })}>จบกิจกรรม <ArrowRight size={20} /> <Key /></button>

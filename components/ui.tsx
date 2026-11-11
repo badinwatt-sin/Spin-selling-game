@@ -3,14 +3,13 @@ import { useEffect, useRef, useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
 import { play, useSound } from '@/lib/sound';
 import QRCode from 'qrcode';
+import { BrandMark, StageMark } from './icons';
 import { criteria, criterionColor, scoreWords, stages, type StageKey } from '@/lib/spin';
 
 export function Brand({ small }: { small?: boolean }) {
-  return <a href="/" className={`brand ${small ? 'brand-small' : ''}`} aria-label="SPIN Selling Game หน้าแรก">
-    <span className="brand-mark" aria-hidden="true">
-      {(['S', 'P', 'I', 'N'] as const).map((k, i) => <i key={k} style={{ background: stages[i].color }}>{k}</i>)}
-    </span>
-    <span className="brand-text">SPIN Selling Game<small>Role Play Lab · ประกันชีวิต</small></span>
+  return <a href="/" className={`brand ${small ? 'brand-small' : ''}`} aria-label="SPIN Lab หน้าแรก">
+    <BrandMark size={small ? 30 : 38} />
+    <span className="brand-text">SPIN <i>Lab</i><small>Consultative Selling Studio</small></span>
   </a>;
 }
 
@@ -35,8 +34,7 @@ export function Stepper({ current, reached = current, onPick, compact }: { curre
 }
 
 export function StageBadge({ k, size = 'md' }: { k: StageKey; size?: 'sm' | 'md' | 'lg' }) {
-  const s = stages.find(x => x.key === k)!;
-  return <span className={`stage-badge stage-badge-${size}`} style={{ background: s.color }}>{k}</span>;
+  return <StageMark k={k} size={size === 'sm' ? 26 : size === 'lg' ? 60 : 40} className={`stage-badge-${size}`} />;
 }
 
 type Criteria = typeof criteria;

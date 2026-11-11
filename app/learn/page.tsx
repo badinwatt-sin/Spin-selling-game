@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import { Brand, StageBadge } from '@/components/ui';
 import { stages } from '@/lib/spin';
 import { bridges, learn, presentSolution, readySignals, sTopics } from '@/lib/content';
+import { Ico, Sticker } from '@/components/icons';
 
 export const metadata: Metadata = { title: 'เรียนรู้ SPIN · SPIN Selling Game' };
 
@@ -20,7 +21,7 @@ export default function LearnPage() {
 
     <section id="wall" className="card learn-wall">
       <div className="wall-art" aria-hidden="true">{Array.from({ length: 12 }, (_, i) => <span key={i} />)}</div>
-      <div><h2>🏓 {learn.wall.title}</h2><p>{learn.wall.body}</p></div>
+      <div><h2>{learn.wall.title}</h2><p>{learn.wall.body}</p></div>
     </section>
 
     <section id="advisor" className="learn-section">
@@ -36,18 +37,18 @@ export default function LearnPage() {
         const bridge = bridges.find(b => b.from === s.key);
         return <article key={s.key} className="card learn-stage" style={{ '--c': s.color } as React.CSSProperties}>
           <header><StageBadge k={s.key} size="lg" /><div><h3>{s.name}</h3><p>{s.meaning}</p></div></header>
-          <p className="goal">🎯 {s.goal}</p>
+          <p className="goal"><Ico name="target" /> {s.goal}</p>
           {s.key === 'S' && <div className="learn-block"><b>6 หัวข้อที่ควรรู้ (จากสไลด์)</b>
             <ul className="topic-list">{sTopics.map(t => <li key={t.label}><b>{t.label}</b><span>“{t.question}”</span></li>)}</ul></div>}
           <div className="learn-cols">
             <div className="learn-block"><b>ตัวอย่างประโยค</b><ul className="lines">{s.examples.map(l => <li key={l}>“{l}”</li>)}</ul></div>
             <div className="learn-block">
-              <b>✅ ทำแบบนี้</b><ul>{s.doThis.map(t => <li key={t}>{t}</li>)}</ul>
-              <b>⚠️ ระวัง</b><p>{s.avoid}</p>
-              <b>🚦 พร้อมไปขั้นถัดไปเมื่อ</b><ul>{readySignals[s.key].map(t => <li key={t}>{t}</li>)}</ul>
+              <b><Ico name="check" /> ทำแบบนี้</b><ul>{s.doThis.map(t => <li key={t}>{t}</li>)}</ul>
+              <b><Ico name="warn" /> ระวัง</b><p>{s.avoid}</p>
+              <b><Ico name="flag" /> พร้อมไปขั้นถัดไปเมื่อ</b><ul>{readySignals[s.key].map(t => <li key={t}>{t}</li>)}</ul>
             </div>
           </div>
-          {bridge && <p className="bridge">🔗 เชื่อมไป {stages[i + 1].name}: “{bridge.lines[0]}”</p>}
+          {bridge && <p className="bridge"><Ico name="link" /> เชื่อมไป {stages[i + 1].name}: “{bridge.lines[0]}”</p>}
         </article>;
       })}
     </section>

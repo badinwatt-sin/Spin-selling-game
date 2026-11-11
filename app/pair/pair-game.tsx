@@ -6,6 +6,7 @@ import { criteria, reactionByKey, reactions, stages, type ReactionKey } from '@/
 import { Bars, Brand, Notice, Qr, ScorePicker, StageBadge, Wall, useOrigin } from '@/components/ui';
 import { bridges, presentSolution, readySignals, sTopics } from '@/lib/content';
 import { play, unlock } from '@/lib/sound';
+import { Ico, Shape, Sticker } from '@/components/icons';
 
 type Report = { round: number; advisor: string; customer: string; scenario: string; scores: number[]; comment: string; reactions: Partial<Record<ReactionKey, number>>; stageReached: number; seconds: number; createdAt: number; wall?: number };
 type Game = {
@@ -82,7 +83,7 @@ function Header({ game, onLeave }: { game?: Game; onLeave: () => void }) {
     <Brand small />
     <div className="topbar-right">
       {game && <>
-        <span className={`role-pill role-${game.role}`}>{game.role === 'advisor' ? '🧑‍💼 ตัวแทน' : '🙋 ลูกค้า'}</span>
+        <span className={`role-pill role-${game.role}`}>{game.role === 'advisor' ? <><Ico name="advisor" /> ตัวแทน</> : <><Ico name="customer" /> ลูกค้า</>}</span>
         <button type="button" className="code-pill" onClick={copy} title="คัดลอกลิงก์ชวนเพื่อน">
           ห้อง <b>{game.code}</b> {copied ? <Check size={14} /> : <Copy size={14} />}
         </button>
@@ -148,13 +149,13 @@ function Entry({ onReady, error: initialError }: { onReady: (s: Session) => void
         {tab === 'create' && <>
           <div className="field">รอบแรกคุณเป็น
             <div className="segmented">
-              <button type="button" className={role === 'advisor' ? 'on' : ''} onClick={() => setRole('advisor')}>🧑‍💼 ตัวแทน</button>
-              <button type="button" className={role === 'customer' ? 'on' : ''} onClick={() => setRole('customer')}>🙋 ลูกค้า</button>
+              <button type="button" className={role === 'advisor' ? 'on' : ''} onClick={() => setRole('advisor')}><Ico name="advisor" /> ตัวแทน</button>
+              <button type="button" className={role === 'customer' ? 'on' : ''} onClick={() => setRole('customer')}><Ico name="customer" /> ลูกค้า</button>
             </div>
           </div>
           <label className="field">การ์ดลูกค้า
             <select value={scenario} onChange={e => setScenario(e.target.value === 'random' ? 'random' : Number(e.target.value))}>
-              <option value="random">🎲 สุ่มการ์ด</option>
+              <option value="random">สุ่มการ์ด</option>
               {scenarioNames.map((n, i) => <option key={n} value={i}>{n}</option>)}
             </select>
           </label>
@@ -212,7 +213,7 @@ function CustomerBrief({ game, session }: { game: Game; session: Session }) {
       <h2 className="persona-title">{game.scenario.title}</h2>
       <ul className="facts">{p.facts.map(f => <li key={f}>{f}</li>)}</ul>
       <p className="objection">ประโยคติดปาก: {p.objection}</p>
-      {p.hiddenNeed && <p className="hidden-need">🔒 <b>ในใจลึกๆ (บอกเมื่อถูกถามดีๆ เท่านั้น):</b> {p.hiddenNeed}</p>}
+      {p.hiddenNeed && <p className="hidden-need"><Ico name="lock" /> <b>ในใจลึกๆ (บอกเมื่อถูกถามดีๆ เท่านั้น):</b> {p.hiddenNeed}</p>}
       <button type="button" className="btn btn-ghost btn-block" onClick={() => setShowCard(v => !v)}>{showCard ? <><EyeOff size={18} /> ซ่อนการ์ดต้นฉบับ</> : <><Eye size={18} /> ดูการ์ดต้นฉบับ</>}</button>
       {showCard && <CardImage session={session} game={game} />}
     </div>
@@ -320,7 +321,7 @@ function AdvisorPlay({ game, act, busy }: P) {
       <div className="mini-steps" role="tablist" aria-label="ลำดับ SPIN">
         {stages.map((x, i) => <button type="button" role="tab" key={x.key} aria-selected={i === stage} onClick={() => go(i)}
           className={`mini-step ${i === stage ? 'now' : i <= Math.max(game.maxStage, stage) ? 'done' : ''}`} style={{ '--c': x.color } as React.CSSProperties}>
-          {x.key}{i < stage && <small>✓</small>}</button>)}
+          <Shape k={x.key} size={14} color="currentColor" />{x.key}{i < stage && <small>✓</small>}</button>)}
       </div>
       <Wall level={game.wall} compact />
       <TimeText left={left} />
@@ -332,7 +333,7 @@ function AdvisorPlay({ game, act, busy }: P) {
         <StageBadge k={s.key} size="lg" />
         <div><h2>{s.thai}</h2><p>{s.name} · {s.meaning}</p></div>
       </header>
-      <p className="goal">🎯 {s.goal}</p>
+      <p className="goal"><Ico name="target" /> {s.goal}</p>
       <span className="eyebrow">ลองถามลูกค้า{game.scenario.title}</span>
       <ul className="lines lines-big">{(more ? lines : lines.slice(0, 2)).map(l => <li key={l}>“{l}”</li>)}</ul>
       {lines.length > 2 && <button type="button" className="link-btn" onClick={() => setMore(v => !v)}>{more ? 'ย่อ' : `ดูอีก ${lines.length - 2} ประโยค`}</button>}
@@ -344,7 +345,7 @@ function AdvisorPlay({ game, act, busy }: P) {
       </details>}
       {objections.length > 0 && <details className="disclosure">
         <summary>ถ้าลูกค้าค้าน ({objections.length})</summary>
-        {objections.map(o => <div key={o.line} className="objection-pair"><p className="objection">“{o.line}”</p><p>👉 {o.response}</p></div>)}
+        {objections.map(o => <div key={o.line} className="objection-pair"><p className="objection">“{o.line}”</p><p><Ico name="arrow" /> {o.response}</p></div>)}
       </details>}
       {s.key === 'N' && presentSolution.steps.length > 0 && <details className="disclosure" open>
         <summary>ต่อยอดสู่การนำเสนอ (Present Solution)</summary>
@@ -355,14 +356,14 @@ function AdvisorPlay({ game, act, busy }: P) {
       <details className="disclosure">
         <summary>เคล็ดลับขั้นนี้</summary>
         <div className="tips">
-          <div><b>✅ ทำแบบนี้</b><ul>{s.doThis.map(t => <li key={t}>{t}</li>)}</ul></div>
-          <div className="avoid"><b>⚠️ ระวัง</b><p>{s.avoid}</p></div>
+          <div><b><Ico name="check" /> ทำแบบนี้</b><ul>{s.doThis.map(t => <li key={t}>{t}</li>)}</ul></div>
+          <div className="avoid"><b><Ico name="warn" /> ระวัง</b><p>{s.avoid}</p></div>
         </div>
-        {readySignals[s.key].length > 0 && <><b>🚦 พร้อมไปขั้นถัดไปเมื่อ</b><ul>{readySignals[s.key].map(x => <li key={x}>{x}</li>)}</ul></>}
-        <b>📘 ตัวอย่างจากบทเรียน</b>
+        {readySignals[s.key].length > 0 && <><b><Ico name="flag" /> พร้อมไปขั้นถัดไปเมื่อ</b><ul>{readySignals[s.key].map(x => <li key={x}>{x}</li>)}</ul></>}
+        <b><Ico name="book" /> ตัวอย่างจากบทเรียน</b>
         <ul className="lines">{s.examples.map(l => <li key={l}>“{l}”</li>)}</ul>
       </details>
-      {bridge && <p className="bridge">🔗 ประโยคเชื่อมไป {bridge.to}: “{bridge.lines[0]}”</p>}
+      {bridge && <p className="bridge"><Ico name="link" /> ประโยคเชื่อมไป {bridge.to}: “{bridge.lines[0]}”</p>}
     </article>
 
     <div className="dock">
@@ -385,7 +386,7 @@ function CustomerPlay({ game, act, session }: P) {
     await act({ action: 'react', kind: k });
   }
   const groups: { title: string; tone: 'good' | 'neutral' | 'warn' }[] = [
-    { title: '👍 รู้สึกดี', tone: 'good' }, { title: '🤔 ยังลังเล', tone: 'neutral' }, { title: '👎 ไม่โอเค', tone: 'warn' },
+    { title: 'รู้สึกดี', tone: 'good' }, { title: 'ยังลังเล', tone: 'neutral' }, { title: 'ไม่โอเค', tone: 'warn' },
   ];
   return <section className="play">
     <div className="live-bar live-bar-customer" style={{ '--c': s.color } as React.CSSProperties}>
@@ -469,10 +470,10 @@ function ReportCard({ r }: { r: Report }) {
       <div className="avg"><b>{avg}</b><span>/ 5</span></div>
     </header>
     <Bars values={r.scores} />
-    {typeof r.wall === 'number' && <div className="report-wall"><Wall level={r.wall} /><p className="muted small">กำแพงลูกค้าเริ่มที่ 80% ตอนจบเหลือ {r.wall}% {r.wall <= 45 ? '— ลูกค้าเปิดใจได้ดี 👏' : r.wall >= 80 ? '— ลูกค้ายังไม่เปิดใจ ลองถาม P/I ให้ตรงชีวิตลูกค้ามากขึ้น' : ''}</p></div>}
+    {typeof r.wall === 'number' && <div className="report-wall"><Wall level={r.wall} /><p className="muted small">กำแพงลูกค้าเริ่มที่ 80% ตอนจบเหลือ {r.wall}% {r.wall <= 45 ? '— ลูกค้าเปิดใจได้ดี' : r.wall >= 80 ? '— ลูกค้ายังไม่เปิดใจ ลองถาม P/I ให้ตรงชีวิตลูกค้ามากขึ้น' : ''}</p></div>}
     <div className="report-points">
-      <p>💪 <b>จุดแข็ง:</b> {criteria[best].label} — {criteria[best].hint}</p>
-      {r.scores[low] < r.scores[best] && <p>🌱 <b>ฝึกเพิ่ม:</b> {criteria[low].label} — {criteria[low].hint}</p>}
+      <p><Ico name="strength" /> <b>จุดแข็ง:</b> {criteria[best].label} — {criteria[best].hint}</p>
+      {r.scores[low] < r.scores[best] && <p><Ico name="grow" /> <b>ฝึกเพิ่ม:</b> {criteria[low].label} — {criteria[low].hint}</p>}
     </div>
     {r.comment && <blockquote>“{r.comment}”</blockquote>}
     {Object.keys(r.reactions).length > 0 && <div className="mood-summary"><span className="eyebrow">ความรู้สึกลูกค้าระหว่างคุย</span><div>{moodSummary(r.reactions)}</div></div>}

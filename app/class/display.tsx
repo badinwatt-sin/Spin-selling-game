@@ -8,6 +8,7 @@ import { criterionColor, showtimeCriteria, stages } from '@/lib/spin';
 import { postit } from '@/lib/content';
 import { ChoiceLegend, Countdown, Podium, ShowtimeTable, stageOf, useClass, type ClassView, type FeedbackView, type PostitView, type QuizView } from './shared';
 import { Distribution } from './admin';
+import { Ico, Shape, Sticker } from '@/components/icons';
 
 export default function Display() {
   const { data, error } = useClass('display', 1500);
@@ -16,11 +17,11 @@ export default function Display() {
   const a = data?.activity;
   const [armed, setArmed] = useState(false);
   return <main className="display" onClick={() => { if (!armed) { unlock(); setArmed(true); } }}>
-    {!armed && <button type="button" className="sound-arm">🔊 คลิกที่ใดก็ได้เพื่อเปิดเสียงเกม</button>}
+    {!armed && <button type="button" className="sound-arm">คลิกที่ใดก็ได้เพื่อเปิดเสียงเกม</button>}
     <header className="display-top">
       <Brand />
       <div className="display-meta">
-        {data && <span>👥 {data.people} คน</span>}
+        {data && <span><Ico name="users" /> {data.people} คน</span>}
         {error ? <span className="offline">● เชื่อมต่อใหม่…</span> : <span className="online">● LIVE</span>}
         <SoundToggle dark />
         <button type="button" className="icon-btn" aria-label="เต็มจอ" onClick={() => { unlock(); void document.documentElement.requestFullscreen?.(); }}><Maximize size={18} /></button>
@@ -30,7 +31,7 @@ export default function Display() {
       : !a ? <Idle join={join} data={data} />
       : a.kind === 'quiz' ? <QuizScreen q={a} now={data.now} join={join} people={data.people} names={data.names ?? []} />
       : a.kind === 'postit' ? <PostitScreen p={a} now={data.now} join={join} people={data.people} />
-      : a.kind === 'recap' ? <section className="display-center"><span className="display-kicker">🏆 SHOW TIME</span><h1 className="display-hero">สรุปทุกคู่</h1><ShowtimeTable rows={data.showtime} big /></section>
+      : a.kind === 'recap' ? <section className="display-center"><span className="display-kicker"><Ico name="trophy" /> SHOW TIME</span><h1 className="display-hero">สรุปทุกคู่</h1><ShowtimeTable rows={data.showtime} big /></section>
       : <FeedbackScreen f={a} now={data.now} join={join} people={data.people} />}
   </main>;
 }
@@ -43,7 +44,7 @@ function JoinPanel({ join, people, size = 220 }: { join: string; people: number;
 }
 
 function Tiles() {
-  return <div className="tiles">{stages.map(s => <div key={s.key} className="tile" style={{ '--c': s.color } as React.CSSProperties}><b>{s.key}</b><span>{s.name.replace(' Question', '')}</span></div>)}</div>;
+  return <div className="tiles">{stages.map(s => <div key={s.key} className="tile" style={{ '--c': s.color } as React.CSSProperties}><Shape k={s.key} size={54} /><b>{s.key}</b><span>{s.name.replace(' Question', '')}</span></div>)}</div>;
 }
 
 function Idle({ join, data }: { join: string; data: ClassView }) {
@@ -78,7 +79,7 @@ function QuizScreen({ q, now: serverNow, join, people, names }: { q: QuizView; n
   const { intro } = useQuizSound(q, now);
 
   if (q.phase === 'lobby') return <section className="display-center">
-    <span className="display-kicker">🎯 เกมทาย SPIN · {q.total} ข้อ · ข้อละ {q.timeLimit} วินาที</span>
+    <span className="display-kicker"><Ico name="target" /> เกมทาย SPIN · {q.total} ข้อ · ข้อละ {q.timeLimit} วินาที</span>
     <h1 className="display-hero">ประโยคนี้คือ S, P, I หรือ N?</h1>
     <JoinPanel join={join} people={people} />
     <NameBubbles names={names} />
@@ -114,11 +115,11 @@ function QuizScreen({ q, now: serverNow, join, people, names }: { q: QuizView; n
         <span className="display-kicker">เฉลยข้อ {q.reveal.index + 1}</span>
         {q.question && <blockquote className="display-quote small">“{q.question.line}”</blockquote>}
         <div className="reveal-answer big pop-in" style={{ '--c': right.color } as React.CSSProperties}><StageBadge k={right.key} size="lg" /><div><b>{right.name}</b><span>{right.meaning}</span></div></div>
-        <p className="why">💡 {q.reveal.why}</p>
+        <p className="why"><Ico name="idea" /> {q.reveal.why}</p>
         <Distribution q={q} />
       </div>
       <div className="reveal-right">
-        {q.reveal.fastest.length > 0 && <div className="fastest">⚡ เร็วที่สุด: {q.reveal.fastest.map(f => `${f.name} (${(f.ms / 1000).toFixed(1)} วิ)`).join(' · ')}</div>}
+        {q.reveal.fastest.length > 0 && <div className="fastest"><Ico name="strength" /> เร็วที่สุด: {q.reveal.fastest.map(f => `${f.name} (${(f.ms / 1000).toFixed(1)} วิ)`).join(' · ')}</div>}
         <h2>กระดานคะแนน</h2>
         <ol className="board board-display">{q.board.slice(0, 6).map((p, i) => <li key={p.pid} style={{ animationDelay: `${0.4 + i * 0.12}s` }} className="slide-in"><span>#{i + 1}</span><b>{p.name}{p.streak >= 3 && <small className="streak"> 🔥{p.streak}</small>}</b>{p.last > 0 && <em>+{p.last}</em>}<span>{p.score.toLocaleString()}</span></li>)}</ol>
       </div>
@@ -140,7 +141,7 @@ function FinalPodium({ q }: { q: QuizView }) {
   const shown = q.board.slice(0, 3).map((p, i) => (3 - i <= step ? p : null));
   return <section className="display-center">
     <Confetti fire={step === 3 ? q.id : null} />
-    <span className="display-kicker">🏆 สรุปผลเกมทาย SPIN</span>
+    <span className="display-kicker"><Ico name="trophy" /> สรุปผลเกมทาย SPIN</span>
     <h1 className="display-hero">{step < 3 ? 'และผู้ชนะคือ…' : `ยินดีด้วย ${q.board[0]?.name ?? ''}!`}</h1>
     <Podium board={shown.map((p, i) => p ?? { pid: `hidden-${i}`, name: '?', score: 0, correct: 0, hidden: true })} />
     {step === 3 && q.board.length > 3 && <ol className="board board-display board-rest">{q.board.slice(3, 10).map((p, i) => <li key={p.pid}><span>#{i + 4}</span><b>{p.name}</b><span>{p.score.toLocaleString()}</span></li>)}</ol>}
@@ -157,7 +158,7 @@ function PostitScreen({ p, now: serverNow, join, people }: { p: PostitView; now:
   useSfx('timeUp', p.phase === 'writing' && left <= 0 ? p.id : null);
   const head = <div className="postit-head" style={{ '--c': s.color } as React.CSSProperties}>
     <StageBadge k={s.key} size="lg" />
-    <div><span className="display-kicker">📝 #กิจกรรม Post-it · {s.name}</span><h1>{s.meaning}</h1>{p.scenarioTitle && <p>โจทย์: ลูกค้า{p.scenarioTitle} — {p.scenarioBrief}</p>}</div>
+    <div><span className="display-kicker"><Ico name="note" /> #กิจกรรม Post-it · {s.name}</span><h1>{s.meaning}</h1>{p.scenarioTitle && <p>โจทย์: ลูกค้า{p.scenarioTitle} — {p.scenarioBrief}</p>}</div>
   </div>;
   if (p.phase === 'writing') return <section className="display-center">
     {head}
@@ -178,7 +179,7 @@ function PostitScreen({ p, now: serverNow, join, people }: { p: PostitView; now:
 
 function FeedbackScreen({ f, now: serverNow, join, people }: { f: FeedbackView; now: number; join: string; people: number }) {
   const now = useClock(serverNow, 1000);
-  const pair = <p className="display-pair"><b>🧑‍💼 {f.advisor}</b> <small>ตัวแทน</small>{f.customer && <> × <b>🙋 {f.customer}</b> <small>ลูกค้า{f.scenarioTitle ?? ''}</small></>}</p>;
+  const pair = <p className="display-pair"><b><Ico name="advisor" /> {f.advisor}</b> <small>ตัวแทน</small>{f.customer && <> × <b><Ico name="customer" /> {f.customer}</b> <small>ลูกค้า{f.scenarioTitle ?? ''}</small></>}</p>;
   const left = f.startedAt + f.duration * 1000 - now;
 
   if (f.phase === 'roleplay') return <section className="display-center">
@@ -190,7 +191,7 @@ function FeedbackScreen({ f, now: serverNow, join, people }: { f: FeedbackView; 
   </section>;
 
   if (f.phase === 'voting') return <section className="display-center">
-    <span className="display-kicker">🎤 ให้ Feedback ตัวแทน</span>
+    <span className="display-kicker"><Ico name="mic" /> ให้ Feedback ตัวแทน</span>
     {pair}
     <div className="vote-count"><b>{f.ballots}</b><span>/ {people} คนส่งแล้ว</span></div>
     <JoinPanel join={join} people={people} />
@@ -209,18 +210,18 @@ function FeedbackScreen({ f, now: serverNow, join, people }: { f: FeedbackView; 
     <div className="results-grid">
       <div className="card"><h2>คะแนนแต่ละด้าน</h2><Bars values={s.criteria} list={showtimeCriteria} />
         {s.count > 0 && <div className="report-points">
-          <p>💪 <b>เด่นที่สุด:</b> {showtimeCriteria[best].label}</p>
-          {low !== best && <p>🌱 <b>ฝึกเพิ่ม:</b> {showtimeCriteria[low].label}</p>}
+          <p><Ico name="strength" /> <b>เด่นที่สุด:</b> {showtimeCriteria[best].label}</p>
+          {low !== best && <p><Ico name="grow" /> <b>ฝึกเพิ่ม:</b> {showtimeCriteria[low].label}</p>}
         </div>}
       </div>
       <div className="card">
-        <h2>💪 จุดเด่น</h2>
+        <h2><Ico name="strength" /> จุดเด่น</h2>
         <div className="tag-cloud good">{s.strengths.length ? s.strengths.map(t => <span key={t.tag}>{t.tag} <b>{t.count}</b></span>) : <em>—</em>}</div>
-        <h2>🌱 ควรพัฒนา</h2>
+        <h2><Ico name="grow" /> ควรพัฒนา</h2>
         <div className="tag-cloud warn">{s.improves.length ? s.improves.map(t => <span key={t.tag}>{t.tag} <b>{t.count}</b></span>) : <em>—</em>}</div>
       </div>
-      {s.notes.length > 0 && <div className="card notes-card"><h2>💬 ความเห็นจากเพื่อนๆ</h2>
-        <div className="notes">{s.notes.slice(0, 16).map((n, i) => <div key={i} className="note">{n.good && <p>👍 {n.good}</p>}{n.tip && <p>💡 {n.tip}</p>}</div>)}</div></div>}
+      {s.notes.length > 0 && <div className="card notes-card"><h2><Ico name="chat" /> ความเห็นจากเพื่อนๆ</h2>
+        <div className="notes">{s.notes.slice(0, 16).map((n, i) => <div key={i} className="note">{n.good && <p><Ico name="like" /> {n.good}</p>}{n.tip && <p><Ico name="idea" /> {n.tip}</p>}</div>)}</div></div>}
     </div>
   </section>;
 }

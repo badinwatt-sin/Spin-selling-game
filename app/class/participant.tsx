@@ -7,6 +7,7 @@ import { postit } from '@/lib/content';
 import { Bars, Brand, Chips, Confetti, Notice, ScorePicker, SoundToggle, StageBadge, useSfx } from '@/components/ui';
 import { play, unlock } from '@/lib/sound';
 import { ChoiceLegend, Countdown, Podium, ShowtimeTable, stageOf, useClass, type FeedbackView, type PostitView, type QuizView } from './shared';
+import { Ico, Shape, Sticker } from '@/components/icons';
 
 type Me = { token: string; pid: string; name: string; classId: string };
 type Picked = { activityId: string; index: number; choice: StageKey; ms?: number };
@@ -30,7 +31,7 @@ export default function Participant() {
     <header className="topbar">
       <Brand small />
       <div className="topbar-right">
-        <span className="name-pill">👤 {me.name}</span>
+        <span className="name-pill"><Ico name="advisor" /> {me.name}</span>
         <SoundToggle />
         <button type="button" className="icon-btn" aria-label="เปลี่ยนชื่อ" onClick={() => confirm('ออกและเปลี่ยนชื่อ? คะแนนในเกมนี้จะเริ่มใหม่') && setMe(null)}><LogOut size={18} /></button>
       </div>
@@ -86,7 +87,7 @@ function Waiting() {
   </section>;
 }
 
-const waitLines = ['คิดแบบที่ปรึกษามืออาชีพเลย 👏', 'รอเพื่อนๆ แป๊บนึงนะ…', 'ส่งแล้ว! ลุ้นเฉลยกัน 🤞', 'ตัดสินใจเร็วมาก ⚡', 'มั่นใจไหม? เดี๋ยวรู้กัน 😄'];
+const waitLines = ['คิดแบบที่ปรึกษามืออาชีพ', 'ล็อกคำตอบแล้ว รอเพื่อนแป๊บ', 'ส่งแล้ว ลุ้นเฉลยกัน', 'ตัดสินใจไวมาก', 'มั่นใจไหม เดี๋ยวรู้กัน'];
 
 function Quiz({ q, me, now: serverNow, onError }: { q: QuizView; me: Me; now: number; onError: (e: unknown) => void }) {
   const now = useClock(serverNow, 100);
@@ -141,7 +142,7 @@ function Quiz({ q, me, now: serverNow, onError }: { q: QuizView; me: Me; now: nu
       <div className="qp-top"><span>ข้อ {q.index + 1}/{q.total}</span><Countdown closesAt={q.closesAt} openedAt={q.openedAt} now={now} /></div>
       <p className="qp-question qp-question-small">“{q.question.line}”</p>
       {pickedLoaded && <div className="qp-tiles">{stages.map(s => <button type="button" key={s.key} className="qp-tile" style={{ '--c': s.color } as React.CSSProperties} onClick={() => answer(s.key)}>
-        <b>{s.key}</b><span>{s.name.replace(' Question', '')}</span><small>{s.thai}</small>
+        <Shape k={s.key} size={40} /><b>{s.key}</b><span>{s.name.replace(' Question', '')}</span><small>{s.thai}</small>
       </button>)}</div>}
     </section>;
   }
@@ -173,7 +174,7 @@ function Quiz({ q, me, now: serverNow, onError }: { q: QuizView; me: Me; now: nu
     <div className="qp-center">
       <span className="qp-kicker">จบเกม</span>
       {my ? <>
-        <div className="qp-medal">{my.score > 0 ? ['🥇', '🥈', '🥉'][rank - 1] ?? '🎉' : '💪'}</div>
+        <div className="qp-medal">{my.score > 0 && rank <= 3 ? ['🥇', '🥈', '🥉'][rank - 1] : <Sticker name="trophy" tone="yellow" size={40} />}</div>
         <h1>อันดับ {rank}</h1>
         <p className="qp-points">{my.score.toLocaleString()} คะแนน</p>
         <p>ตอบถูก {my.correct} จาก {q.total} ข้อ</p>
@@ -201,7 +202,7 @@ function Feedback({ f, me, onError }: { f: FeedbackView; me: Me; onError: (e: un
     finally { setBusy(false); }
   }
 
-  const who = <p className="pair-line"><b>🧑‍💼 {f.advisor}</b> (ตัวแทน){f.customer && <> คุยกับ <b>🙋 {f.customer}</b></>}{f.scenarioTitle && <> · ลูกค้า{f.scenarioTitle}</>}</p>;
+  const who = <p className="pair-line"><b><Ico name="advisor" /> {f.advisor}</b> (ตัวแทน){f.customer && <> คุยกับ <b><Ico name="customer" /> {f.customer}</b></>}{f.scenarioTitle && <> · ลูกค้า{f.scenarioTitle}</>}</p>;
 
   if (f.phase === 'roleplay') return <section className="narrow">
     <div className="role-hero role-hero-live"><span>● กำลัง Role Play หน้าห้อง</span><h1>ตั้งใจฟัง แล้วเตรียมให้ Feedback</h1>{who}</div>
@@ -235,12 +236,12 @@ function Feedback({ f, me, onError }: { f: FeedbackView; me: Me; onError: (e: un
       <ScorePicker value={scores} onChange={setScores} list={showtimeCriteria} highlightMissing={nudge} />
       <details className="disclosure" open={strengths.length + improves.length > 0 || Boolean(good || tip)}>
         <summary>เพิ่มความเห็น (ไม่บังคับ)</summary>
-        <div className="field"><span>💪 จุดเด่น (เลือกได้สูงสุด 4)</span><Chips options={strengthTags} value={strengths} onChange={setStrengths} tone="good" /></div>
-        <div className="field"><span>🌱 ควรพัฒนา (เลือกได้สูงสุด 4)</span><Chips options={improveTags} value={improves} onChange={setImproves} tone="warn" /></div>
+        <div className="field"><span><Ico name="strength" /> จุดเด่น (เลือกได้สูงสุด 4)</span><Chips options={strengthTags} value={strengths} onChange={setStrengths} tone="good" /></div>
+        <div className="field"><span><Ico name="grow" /> ควรพัฒนา (เลือกได้สูงสุด 4)</span><Chips options={improveTags} value={improves} onChange={setImproves} tone="warn" /></div>
         <label className="field">ชอบตรงไหนเป็นพิเศษ<textarea rows={2} maxLength={240} value={good} onChange={e => setGood(e.target.value)} placeholder="เช่น คำถามเรื่องค่าเทอมลูกทำให้ลูกค้าคิดตาม" /></label>
         <label className="field">คำแนะนำ<textarea rows={2} maxLength={240} value={tip} onChange={e => setTip(e.target.value)} placeholder="เช่น ลองให้ลูกค้าพูดประโยชน์เองใน N" /></label>
       </details>
-      <p className="muted small center">🔒 ไม่แสดงชื่อผู้ให้ Feedback บนจอ</p>
+      <p className="muted small center"><Ico name="lock" /> ไม่แสดงชื่อผู้ให้ Feedback บนจอ</p>
     </div>
     <div className="dock">
       <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={trySubmit}>{done < total ? `ให้คะแนนแล้ว ${done}/${total}` : 'ส่ง Feedback'} <ArrowRight size={20} /></button>

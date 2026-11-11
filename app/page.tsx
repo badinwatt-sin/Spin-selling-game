@@ -1,54 +1,71 @@
-import { ArrowRight, BookOpen, Presentation, Radio, Users } from 'lucide-react';
+import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import { Brand, StageBadge } from '@/components/ui';
+import { Illo, Shape } from '@/components/icons';
 import { stages } from '@/lib/spin';
 import LiveBanner from './live-banner';
 
+const modules = [
+  { n: '01', href: '/learn', illo: 'learn', title: 'เรียนรู้ SPIN', time: 'อ่าน 5 นาที', body: 'กำแพงลูกค้า 4 ขั้นของ SPIN ประโยคตัวอย่าง ประโยคเชื่อม และข้อผิดพลาดที่ตัวแทนทำบ่อย', cta: 'เปิดบทเรียน' },
+  { n: '02', href: '/pair', illo: 'pair', title: 'Role Play เป็นคู่', time: '10–15 นาที / รอบ', body: 'สลับกันเป็นตัวแทนกับลูกค้าตามการ์ด ลูกค้ากดบอกความรู้สึกได้สดๆ ดูกำแพงลดลงแบบเรียลไทม์', cta: 'เริ่มฝึก' },
+  { n: '03', href: '/class', illo: 'class', title: 'กิจกรรมทั้งคลาส', time: 'ใช้มือถือ', body: 'Post-it คิดคำถาม เกมทาย S/P/I/N แข่งตอบไว และให้ Feedback คู่ที่ขึ้น SHOW TIME', cta: 'เข้าร่วมคลาส' },
+  { n: '04', href: '/class/admin', illo: 'coach', title: 'Coach Console', time: 'สำหรับผู้สอน', body: 'คุมเกมและกิจกรรมทั้งห้อง เปิดจอ Live ขึ้นโปรเจกเตอร์ สรุปผลทุกคู่ในคลิกเดียว', cta: 'ไปหน้าผู้สอน' },
+] as const;
+
 export default function Home() {
   return <main className="page home">
-    <header className="topbar"><Brand /><a className="ghost-link" href="/class/admin">สำหรับผู้สอน</a></header>
+    <header className="topbar">
+      <Brand />
+      <nav className="top-nav" aria-label="เมนูหลัก">
+        <a href="/learn">บทเรียน</a><a href="/pair">ฝึกคู่</a><a href="/class">เข้าคลาส</a><a className="nav-pill" href="/class/admin">ผู้สอน</a>
+      </nav>
+    </header>
 
-    <section className="hero">
-      <span className="eyebrow">Consultative Selling · ประกันชีวิต</span>
-      <h1>เปลี่ยนจาก<em>ตัวแทน</em><br />เป็น<em>ที่ปรึกษา</em>ด้วย SPIN</h1>
-      <p>ฝึกถามให้ลูกค้าเห็นปัญหาและคุณค่าด้วยตัวเอง — Stop push selling, start helping customer.</p>
-      <LiveBanner />
+    <section className="hero-x">
+      <div className="hero-copy">
+        <span className="tag">Course · Consultative Selling for Life Insurance</span>
+        <h1>ถามให้ถูก<br />ลูกค้า<mark>เปิดใจ</mark>เอง</h1>
+        <p>ห้องเรียน SPIN Selling สำหรับตัวแทนประกันชีวิต เปลี่ยนจากคนขายเป็นที่ปรึกษา ด้วยคำถาม 4 ขั้นที่ใช้ได้จริงในการคุยกับลูกค้า</p>
+        <div className="hero-cta">
+          <a className="btn btn-primary btn-lg" href="/pair">เริ่มฝึก Role Play <ArrowRight size={20} /></a>
+          <a className="btn btn-ghost btn-lg" href="/class">เข้าห้องเรียน</a>
+        </div>
+        <LiveBanner />
+      </div>
+      <div className="hero-hand" aria-hidden="true">
+        {stages.map((s, i) => <div key={s.key} className={`hand-card hand-${i}`} style={{ '--c': s.color } as React.CSSProperties}>
+          <Shape k={s.key} size={46} />
+          <b className="hand-letter">{s.key}</b>
+        </div>)}
+      </div>
     </section>
 
-    <section className="modes">
-      <a className="mode mode-learn" href="/learn">
-        <span className="mode-icon"><BookOpen size={28} /></span>
-        <div><h2>เรียนรู้ SPIN</h2><p>กำแพงลูกค้า 4 ขั้น SPIN ตัวอย่างประโยค ประโยคเชื่อม และข้อผิดพลาดที่พบบ่อย สรุปจากบทเรียน</p></div>
-        <span className="mode-go">อ่านสรุป <ArrowRight size={18} /></span>
-      </a>
-      <a className="mode mode-pair" href="/pair">
-        <span className="mode-icon"><Users size={28} /></span>
-        <div><h2>Role Play เป็นคู่</h2><p>สลับกันเป็นตัวแทนและลูกค้าตามการ์ด ตัวแทนมีตัวอย่างประโยคทุกขั้น ลูกค้ากดบอกความรู้สึกได้ระหว่างคุย</p></div>
-        <span className="mode-go">เริ่มฝึก <ArrowRight size={18} /></span>
-      </a>
-      <a className="mode mode-class" href="/class">
-        <span className="mode-icon"><Radio size={28} /></span>
-        <div><h2>กิจกรรมทั้งคลาส</h2><p>Post-it คิดคำถาม เกมทาย S/P/I/N แข่งตอบเร็ว และ SHOW TIME ให้ Feedback คู่หน้าห้อง</p></div>
-        <span className="mode-go">เข้าร่วม <ArrowRight size={18} /></span>
-      </a>
-      <a className="mode mode-admin" href="/class/admin">
-        <span className="mode-icon"><Presentation size={28} /></span>
-        <div><h2>ผู้สอน · จอ Live</h2><p>ควบคุม Post-it เกมทาย SPIN และ SHOW TIME แล้วเปิดจอ Live ขึ้นโปรเจกเตอร์</p></div>
-        <span className="mode-go">ไปหน้าผู้สอน <ArrowRight size={18} /></span>
-      </a>
+    <div className="ticker" aria-hidden="true"><div>{Array.from({ length: 6 }, (_, i) => <span key={i}>Stop push selling <i>✦</i> Start helping customer <i>✦</i> </span>)}</div></div>
+
+    <section className="syllabus">
+      <header className="section-head"><span className="tag tag-ink">Syllabus</span><h2>เส้นทางการเรียนวันนี้</h2></header>
+      <div className="module-grid">
+        {modules.map(m => <a key={m.n} href={m.href} className="module">
+          <div className="module-top"><span className="module-n">{m.n}</span><span className="chip">{m.time}</span></div>
+          <Illo kind={m.illo} />
+          <h3>{m.title}</h3>
+          <p>{m.body}</p>
+          <span className="module-go">{m.cta} <ArrowUpRight size={18} /></span>
+        </a>)}
+      </div>
     </section>
 
     <section className="spin-overview">
-      <h2>4 ขั้นของ SPIN Selling</h2>
-      <p className="muted">การขายที่ใช้คำถาม นำไปสู่การนำเสนอและปิดการขาย — Don’t rush pushing product!</p>
+      <header className="section-head"><span className="tag tag-ink">Framework</span><h2>4 ขั้นของ SPIN Selling</h2>
+        <p className="muted">การขายที่ใช้คำถาม นำไปสู่การนำเสนอและปิดการขาย — Don’t rush pushing product.</p></header>
       <div className="overview-grid">
-        {stages.map(s => <article key={s.key} className="overview-card" style={{ '--c': s.color } as React.CSSProperties}>
-          <StageBadge k={s.key} size="lg" />
+        {stages.map((s, i) => <article key={s.key} className="overview-card" style={{ '--c': s.color } as React.CSSProperties}>
+          <div className="overview-top"><StageBadge k={s.key} size="lg" /><span className="overview-n">0{i + 1}</span></div>
           <h3>{s.name}</h3>
           <p className="overview-meaning">{s.meaning}</p>
           <p className="overview-example">“{s.examples[0]}”</p>
         </article>)}
       </div>
     </section>
-    <footer className="foot">SPIN Selling Technique · Neil Rackham · เนื้อหาจาก SPIN Selling Master (Consultative Selling)</footer>
+    <footer className="foot"><b>SPIN Lab</b> · SPIN Selling Technique (Neil Rackham) · เนื้อหาจาก SPIN Selling Master</footer>
   </main>;
 }
