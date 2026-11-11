@@ -5,6 +5,7 @@ import { api, errorText, mmss, useClock, usePoll, useStored, ApiError } from '@/
 import { criteria, reactionByKey, reactions, stages, type ReactionKey } from '@/lib/spin';
 import { Bars, Brand, Notice, Qr, ScorePicker, StageBadge, Wall, useOrigin } from '@/components/ui';
 import { bridges, presentSolution, readySignals, sTopics } from '@/lib/content';
+import { play, unlock } from '@/lib/sound';
 
 type Report = { round: number; advisor: string; customer: string; scenario: string; scores: number[]; comment: string; reactions: Partial<Record<ReactionKey, number>>; stageReached: number; seconds: number; createdAt: number; wall?: number };
 type Game = {
@@ -272,7 +273,7 @@ function Lobby({ game, act, busy, session }: P) {
     </div>
     <div className="dock">
       <button type="button" className="btn btn-ghost" disabled={busy} onClick={() => act({ action: 'shuffle' })} aria-label="สุ่มลูกค้าใหม่"><Shuffle size={18} /></button>
-      <button type="button" className="btn btn-primary btn-lg" disabled={busy || !game.ready} onClick={() => act({ action: 'start' })}>
+      <button type="button" className="btn btn-primary btn-lg" disabled={busy || !game.ready} onClick={() => { unlock(); play('whoosh'); void act({ action: 'start' }); }}>
         {game.ready ? <>เริ่ม Role Play <ArrowRight size={20} /></> : <><span className="pulse-dot" /> รอ {partner.name} อ่านบท…</>}</button>
     </div>
   </section>;
@@ -305,7 +306,7 @@ function AdvisorPlay({ game, act, busy }: P) {
   const seen = useRef(latest?.at ?? 0);
   useEffect(() => {
     if (latest && latest.at > seen.current) {
-      seen.current = latest.at; setFlash(latest); navigator.vibrate?.(40);
+      seen.current = latest.at; setFlash(latest); navigator.vibrate?.(40); play('react');
       const t = setTimeout(() => setFlash(undefined), 5000); return () => clearTimeout(t);
     }
   }, [latest]);
@@ -379,7 +380,7 @@ function CustomerPlay({ game, act, session }: P) {
   const left = useTimeLeft(game);
   const s = stages[game.stage];
   async function send(k: ReactionKey) {
-    setSent(k); navigator.vibrate?.(25);
+    setSent(k); navigator.vibrate?.(25); unlock(); play('tap');
     setTimeout(() => setSent(x => x === k ? undefined : x), 1500);
     await act({ action: 'react', kind: k });
   }

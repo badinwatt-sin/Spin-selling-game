@@ -4,7 +4,8 @@ import { ArrowRight, Check, LogOut } from 'lucide-react';
 import { api, ApiError, errorText, useClock, useStored } from '@/lib/client';
 import { improveTags, showtimeCriteria, stages, strengthTags, type StageKey } from '@/lib/spin';
 import { postit } from '@/lib/content';
-import { Bars, Brand, Chips, Notice, ScorePicker, StageBadge } from '@/components/ui';
+import { Bars, Brand, Chips, Confetti, Notice, ScorePicker, SoundToggle, StageBadge, useSfx } from '@/components/ui';
+import { play, unlock } from '@/lib/sound';
 import { ChoiceLegend, Countdown, Podium, ShowtimeTable, stageOf, useClass, type FeedbackView, type PostitView, type QuizView } from './shared';
 
 type Me = { token: string; pid: string; name: string; classId: string };
@@ -25,11 +26,12 @@ export default function Participant() {
     setError(errorText(e));
   };
 
-  return <main className="page class-page">
+  return <main className={`page class-page ${a?.kind === 'quiz' ? 'quiz-mode' : ''}`}>
     <header className="topbar">
       <Brand small />
       <div className="topbar-right">
         <span className="name-pill">👤 {me.name}</span>
+        <SoundToggle />
         <button type="button" className="icon-btn" aria-label="เปลี่ยนชื่อ" onClick={() => confirm('ออกและเปลี่ยนชื่อ? คะแนนในเกมนี้จะเริ่มใหม่') && setMe(null)}><LogOut size={18} /></button>
       </div>
     </header>
@@ -51,6 +53,7 @@ function Join({ onJoined, defaultName, restarted }: { onJoined: (m: Me) => void;
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError(undefined);
     try {
+      unlock();
       const res = await api<{ token: string; pid: string; name: string; classId: string }>('/api/class', { action: 'join', name });
       try { localStorage.setItem('spin-name', res.name); } catch { /* ignore */ }
       onJoined(res);
@@ -83,77 +86,101 @@ function Waiting() {
   </section>;
 }
 
+const waitLines = ['คิดแบบที่ปรึกษามืออาชีพเลย 👏', 'รอเพื่อนๆ แป๊บนึงนะ…', 'ส่งแล้ว! ลุ้นเฉลยกัน 🤞', 'ตัดสินใจเร็วมาก ⚡', 'มั่นใจไหม? เดี๋ยวรู้กัน 😄'];
+
 function Quiz({ q, me, now: serverNow, onError }: { q: QuizView; me: Me; now: number; onError: (e: unknown) => void }) {
   const now = useClock(serverNow, 100);
   const [picked, setPicked, pickedLoaded] = useStored<Picked>('spin-class-pick');
   const mine = picked && picked.activityId === q.id && picked.index === q.index ? picked : null;
   const my = q.scores[me.pid];
+  const intro = q.phase === 'question' && q.openedAt !== null && now < q.openedAt;
+  const correct = q.phase === 'reveal' && q.reveal && mine ? mine.choice === q.reveal.answer : null;
+  useSfx(correct ? 'correct' : 'wrong', q.phase === 'reveal' && mine ? `${q.id}:${q.index}` : null);
+  useSfx('whoosh', intro ? `${q.id}:${q.index}` : null);
 
   async function answer(choice: StageKey) {
     if (mine) return;
+    unlock(); play('tap');
     const p: Picked = { activityId: q.id, index: q.index, choice };
     setPicked(p); navigator.vibrate?.(30);
     try { const r = await api<{ ms: number }>('/api/class', { action: 'answer', activityId: q.id, index: q.index, choice }, me.token); setPicked({ ...p, ms: r.ms }); }
     catch (e) { setPicked(null); onError(e); }
   }
 
-  if (q.phase === 'lobby') return <section className="narrow">
-    <div className="role-hero role-hero-quiz"><span>เกมทาย SPIN</span><h1>ประโยคนี้คือ S, P, I หรือ N?</h1>
-      <p>{q.total} ข้อ · ข้อละ {q.timeLimit} วินาที · ตอบถูกและเร็วได้คะแนนมากกว่า</p></div>
-    <ChoiceLegend />
-    <div className="card wait-card"><div className="pulse-dot" /> รอผู้สอนเปิดข้อแรก…</div>
+  if (q.phase === 'lobby') return <section className="qp qp-lobby">
+    <div className="qp-center">
+      <span className="qp-kicker">เกมทาย SPIN</span>
+      <h1>คุณเข้าเกมแล้ว!</h1>
+      <p className="qp-name">{me.name}</p>
+      <p>ดูชื่อคุณบนจอหน้าห้อง · {q.total} ข้อ · ข้อละ {q.timeLimit} วินาที</p>
+      <p className="qp-small">ตอบถูก + เร็ว = คะแนนมาก</p>
+    </div>
+    <ChoiceLegend compact />
   </section>;
 
   if (q.phase === 'question' && q.question) {
+    if (intro) {
+      const n = Math.max(1, Math.ceil(((q.openedAt ?? 0) - now) / 1000));
+      return <section className="qp qp-intro" key={`i${q.index}`}>
+        <span className="qp-kicker">ข้อ {q.index + 1} / {q.total}</span>
+        <p className="qp-question">“{q.question.line}”</p>
+        <div className="qp-count" key={n}>{n}</div>
+        <p className="qp-small">อ่านประโยคให้จบ แล้วเตรียมเลือก S · P · I · N</p>
+      </section>;
+    }
     const closed = now > (q.closesAt ?? 0);
-    return <section className="narrow quiz">
-      <div className="quiz-head"><span>ข้อ {q.index + 1} / {q.total}</span><Countdown closesAt={q.closesAt} openedAt={q.openedAt} now={now} /></div>
-      <div className="card quote-card"><span className="context">{q.question.context}</span><p>“{q.question.line}”</p></div>
-      {mine ? <div className={`card answered-card`} style={{ '--c': stageOf(mine.choice).color } as React.CSSProperties}>
-        <StageBadge k={mine.choice} size="lg" />
-        <div><b>คุณตอบ {stageOf(mine.choice).name}</b><span>{mine.ms !== undefined ? `ใช้เวลา ${(mine.ms / 1000).toFixed(1)} วินาที · ` : ''}รอเฉลย…</span></div>
-      </div>
-        : closed ? <div className="card wait-card">หมดเวลา รอเฉลย…</div>
-        : pickedLoaded && <div className="answer-grid">{stages.map(s => <button type="button" key={s.key} className="answer-btn" style={{ '--c': s.color } as React.CSSProperties} onClick={() => answer(s.key)}>
-          <b>{s.key}</b><span className="answer-name">{s.name}</span><small>{s.meaning}</small>
-        </button>)}</div>}
+    if (mine || closed) return <section className="qp qp-wait">
+      {mine ? <>
+        <div className="qp-picked" style={{ '--c': stageOf(mine.choice).color } as React.CSSProperties}>{mine.choice}</div>
+        <h2>{waitLines[(q.index + me.name.length) % waitLines.length]}</h2>
+        {mine.ms !== undefined && <p>ตอบใน {(mine.ms / 1000).toFixed(1)} วินาที</p>}
+      </> : <h2>⏰ หมดเวลา!</h2>}
+      <div className="qp-dots"><i /><i /><i /></div>
+    </section>;
+    return <section className="qp qp-answer">
+      <div className="qp-top"><span>ข้อ {q.index + 1}/{q.total}</span><Countdown closesAt={q.closesAt} openedAt={q.openedAt} now={now} /></div>
+      <p className="qp-question qp-question-small">“{q.question.line}”</p>
+      {pickedLoaded && <div className="qp-tiles">{stages.map(s => <button type="button" key={s.key} className="qp-tile" style={{ '--c': s.color } as React.CSSProperties} onClick={() => answer(s.key)}>
+        <b>{s.key}</b><span>{s.name.replace(' Question', '')}</span><small>{s.thai}</small>
+      </button>)}</div>}
     </section>;
   }
 
   if (q.phase === 'reveal' && q.reveal) {
     const right = stageOf(q.reveal.answer);
-    const correct = mine?.choice === q.reveal.answer;
-    return <section className="narrow">
-      <div className={`result-banner ${!mine ? 'none' : correct ? 'yes' : 'no'}`}>
-        {!mine ? 'ข้อนี้คุณไม่ได้ตอบ' : correct ? <>✓ ถูกต้อง! <b>+{my?.last ?? 0}</b></> : '✗ ยังไม่ถูก ข้อหน้าเอาใหม่'}
+    const scores = Object.values(q.scores).sort((x, y) => y.score - x.score);
+    const ahead = my ? scores.filter(x => x.score > my.score).at(-1) : undefined;
+    return <section className={`qp qp-result ${!mine ? 'none' : correct ? 'yes' : 'no'}`}>
+      <div className="qp-center">
+        <div className="qp-mark">{!mine ? '⏰' : correct ? '✓' : '✗'}</div>
+        <h1>{!mine ? 'ข้อนี้ไม่ได้ตอบ' : correct ? 'ถูกต้อง!' : 'ยังไม่ถูก'}</h1>
+        {correct && <p className="qp-points">+{my?.last ?? 0}</p>}
+        {correct && (my?.streak ?? 0) >= 2 && <p className="qp-streak">🔥 ถูกติดกัน {my!.streak} ข้อ</p>}
+        {mine && !correct && <p className="pick-vs">คุณตอบ <b>{mine.choice}</b> → เฉลย <b>{right.key}</b> {right.name}</p>}
       </div>
-      <div className="card reveal-card" style={{ '--c': right.color } as React.CSSProperties}>
-        <span className="eyebrow">เฉลยข้อ {q.reveal.index + 1}</span>
-        {mine && !correct && <p className="pick-vs">คุณตอบ <StageBadge k={mine.choice} size="sm" /> → เฉลย <StageBadge k={right.key} size="sm" /></p>}
-        <div className="reveal-answer"><StageBadge k={right.key} size="lg" /><div><b>{right.name}</b><span>{right.meaning}</span></div></div>
-        <p>💡 {q.reveal.why}</p>
-      </div>
-      <MyRank q={q} me={me} />
+      <div className="qp-why"><b>{right.key} · {right.name}</b><span>{q.reveal.why}</span></div>
+      {my && <div className="qp-rank">
+        <span>อันดับ <b>{1 + scores.filter(x => x.score > my.score).length}</b> จาก {q.players}</span>
+        <span>{my.score.toLocaleString()} คะแนน</span>
+        {ahead && <small>ตามหลัง {ahead.name} อีก {(ahead.score - my.score).toLocaleString()} คะแนน</small>}
+      </div>}
     </section>;
   }
 
-  return <section className="narrow">
-    <div className="role-hero role-hero-quiz"><span>จบเกม</span><h1>ผลอันดับ</h1></div>
-    <Podium board={q.board} />
-    <MyRank q={q} me={me} />
-  </section>;
-}
-
-function MyRank({ q, me }: { q: QuizView; me: Me }) {
-  const my = q.scores[me.pid];
-  const same = my ? Object.values(q.scores).filter(x => x.score === my.score) : [];
-  const tied = same.length > 1;
   const rank = my ? 1 + Object.values(q.scores).filter(x => x.score > my.score).length : 0;
-  return <div className="card my-rank">
-    {my ? <><div><span className="eyebrow">อันดับของคุณ</span><b className="rank-big">{tied ? 'เสมอ ' : ''}#{rank}</b><span className="muted"> จาก {q.players} คน</span></div>
-      <div className="rank-score"><b>{my.score.toLocaleString()}</b><span>คะแนน · ถูก {my.correct} ข้อ</span></div></>
-      : <p className="muted">ตอบข้อถัดไปเพื่อขึ้นกระดานคะแนน</p>}
-  </div>;
+  return <section className="qp qp-final">
+    <Confetti fire={rank > 0 && rank <= 3 && (my?.score ?? 0) > 0 ? q.id : null} />
+    <div className="qp-center">
+      <span className="qp-kicker">จบเกม</span>
+      {my ? <>
+        <div className="qp-medal">{my.score > 0 ? ['🥇', '🥈', '🥉'][rank - 1] ?? '🎉' : '💪'}</div>
+        <h1>อันดับ {rank}</h1>
+        <p className="qp-points">{my.score.toLocaleString()} คะแนน</p>
+        <p>ตอบถูก {my.correct} จาก {q.total} ข้อ</p>
+      </> : <h1>ขอบคุณที่ร่วมเล่น!</h1>}
+    </div>
+    <Podium board={q.board} />
+  </section>;
 }
 
 function Feedback({ f, me, onError }: { f: FeedbackView; me: Me; onError: (e: unknown) => void }) {

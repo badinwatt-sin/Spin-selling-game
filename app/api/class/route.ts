@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GameError } from '@/lib/server/game';
 import { choices, closeFeedback, controlClass, makeBallot, makeNote, publicState, scoreQuestion, summarizeFeedback } from '@/lib/server/classroom';
 import {
-  cached, countBallots, countNotes, countPlayers, forget, listAnswers, playerToken, readBallots, readNotes, readPlayer, readState,
+  cached, countBallots, countNotes, listPlayers, forget, listAnswers, playerToken, readBallots, readNotes, readPlayer, readState,
   registerPlayer, saveAnswer, saveBallot, saveNote, secret, writeState,
 } from '@/lib/server/class-storage';
 import type { StageKey } from '@/lib/spin';
@@ -34,14 +34,15 @@ async function snapshot(screen: boolean, fresh = false) {
   const now = Date.now();
   const { state } = fresh ? await readState(now) : await cached('state', 800, () => readState(now));
   const a = state.activity;
-  let people = 0, answered = 0, ballots = 0;
+  let people = 0, answered = 0, ballots = 0, names: string[] = [];
   if (screen) {
-    people = await cached(`p:${state.id}`, fresh ? 0 : 1500, () => countPlayers(state.id));
+    names = await cached(`p:${state.id}`, fresh ? 0 : 1500, () => listPlayers(state.id));
+    people = names.length;
     if (a?.kind === 'quiz' && a.phase === 'question') answered = (await listAnswers(state.id, a.id, a.index)).length;
     if (a?.kind === 'feedback' && a.phase !== 'roleplay') ballots = await countBallots(state.id, a.id);
     if (a?.kind === 'postit' && a.phase === 'writing') answered = await countNotes(state.id, a.id);
   }
-  return publicState(state, people, now, answered, ballots);
+  return { ...publicState(state, people, now, answered, ballots), names: names.slice(-80) };
 }
 
 export async function GET(req: NextRequest) {
@@ -93,6 +94,7 @@ export async function POST(req: NextRequest) {
         return reply({ error: 'คำถามนี้ปิดไปแล้ว' }, 409);
       }
       if (!choices.includes(b.choice as StageKey)) return reply({ error: 'กรุณาเลือก S, P, I หรือ N' }, 400);
+      if (now < (a.openedAt ?? 0) - 300) return reply({ error: 'รอให้ตัวเลือกขึ้นก่อนนะ' }, 409);
       const ms = Math.max(0, now - (a.openedAt ?? now));
       if (now > (a.closesAt ?? 0) + 1500) return reply({ error: 'หมดเวลาตอบข้อนี้แล้ว' }, 409);
       await saveAnswer(state.id, a.id, a.index, me.pid, me.nameKey, b.choice as StageKey, ms);

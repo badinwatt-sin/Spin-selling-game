@@ -9,6 +9,8 @@ import { improveTags, showtimeCriteria, strengthTags, type StageKey } from '../s
 
 export const choices: StageKey[] = ['S', 'P', 'I', 'N'];
 export const classLifetime = 10 * 3600_000;
+// Like a game show: the question is shown first, answers unlock after a short read.
+export const readLead = 3500;
 
 export type Score = { name: string; score: number; correct: number; ms: number; last: number; streak: number };
 export type Reveal = {
@@ -17,7 +19,7 @@ export type Reveal = {
 };
 export type QuizActivity = {
   kind: 'quiz'; id: string; phase: 'lobby' | 'question' | 'reveal' | 'final';
-  order: number[]; timeLimit: number; index: number; openedAt: number | null; closesAt: number | null;
+  order: number[]; timeLimit: number; index: number; shownAt?: number | null; openedAt: number | null; closesAt: number | null;
   scores: Record<string, Score>; reveal: Reveal | null;
 };
 export type FeedbackSummary = {
@@ -179,7 +181,7 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
     case 'quiz-open': {
       if (a?.kind !== 'quiz' || !(a.phase === 'lobby' || a.phase === 'reveal')) return bad('เปิดคำถามถัดไปไม่ได้ในตอนนี้');
       if (a.index + 1 >= a.order.length) return bad('ครบทุกคำถามแล้ว กดดูผลอันดับ');
-      Object.assign(a, { phase: 'question', index: a.index + 1, openedAt: now, closesAt: now + a.timeLimit * 1000, reveal: null });
+      Object.assign(a, { phase: 'question', index: a.index + 1, shownAt: now, openedAt: now + readLead, closesAt: now + readLead + a.timeLimit * 1000, reveal: null });
       return s;
     }
     case 'quiz-final':
@@ -248,11 +250,11 @@ export function publicState(state: ClassState, people: number, now = Date.now(),
     ...base,
     activity: {
       kind: a.kind, id: a.id, phase: a.phase, timeLimit: a.timeLimit, index: a.index, total: a.order.length,
-      openedAt: a.openedAt, closesAt: a.closesAt, answered, reveal: a.reveal,
+      shownAt: a.shownAt ?? a.openedAt, openedAt: a.openedAt, closesAt: a.closesAt, answered, reveal: a.reveal,
       question: item ? { context: item.context, line: item.line } : null,
       board: board.slice(0, 10).map(({ pid, name, score, correct, last, streak }) => ({ pid, name, score, correct, last, streak })),
       players: board.length,
-      scores: Object.fromEntries(board.map((x, i) => [x.pid, { rank: i + 1, score: x.score, correct: x.correct, last: x.last }])),
+      scores: Object.fromEntries(board.map((x, i) => [x.pid, { rank: i + 1, score: x.score, correct: x.correct, last: x.last, streak: x.streak, name: x.name }])),
     },
   };
 }

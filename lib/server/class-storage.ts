@@ -69,8 +69,10 @@ export function readPlayer(token: string, sid: string) {
 export async function registerPlayer(sid: string, pid: string, name: string) {
   await store.write(`${base(sid)}p/${pid}.${b64(name)}`, { at: Date.now() }, { overwrite: true });
 }
-export async function countPlayers(sid: string) {
-  return (await store.list(`${base(sid)}p/`)).length;
+export async function listPlayers(sid: string) {
+  const prefix = `${base(sid)}p/`;
+  return (await store.list(prefix)).sort((a, b) => a.uploadedAt - b.uploadedAt)
+    .map(e => unb64(e.pathname.slice(prefix.length).split('.')[1] ?? '') || 'ผู้เล่น');
 }
 
 // Quiz answers: everything needed for scoring lives in the pathname, so one list() call scores a question.

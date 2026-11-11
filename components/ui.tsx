@@ -1,7 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Volume2, VolumeX } from 'lucide-react';
+import { play, useSound } from '@/lib/sound';
 import QRCode from 'qrcode';
-import { criteria, scoreWords, stages, type StageKey } from '@/lib/spin';
+import { criteria, criterionColor, scoreWords, stages, type StageKey } from '@/lib/spin';
 
 export function Brand({ small }: { small?: boolean }) {
   return <a href="/" className={`brand ${small ? 'brand-small' : ''}`} aria-label="SPIN Selling Game หน้าแรก">
@@ -56,7 +58,7 @@ export function Bars({ values, max = 5, list = criteria }: { values: (number | n
   return <div className="bars">
     {list.map((c, i) => <div className="bar-row" key={c.key}>
       <span className="bar-label"><b>{c.key}</b> {c.label}</span>
-      <span className="bar-track"><span className="bar-fill" style={{ width: `${((values[i] ?? 0) / max) * 100}%`, background: i < 4 ? stages[i].color : i === 4 ? '#7a5cf0' : '#e5a400' }} /></span>
+      <span className="bar-track"><span className="bar-fill" style={{ width: `${((values[i] ?? 0) / max) * 100}%`, background: criterionColor(i) }} /></span>
       <span className="bar-value">{values[i] ?? '–'}</span>
     </div>)}
   </div>;
@@ -74,7 +76,7 @@ export function Chips({ options, value, onChange, tone }: { options: string[]; v
 
 export function Qr({ url, size = 240 }: { url: string; size?: number }) {
   const [src, setSrc] = useState('');
-  useEffect(() => { QRCode.toDataURL(url, { margin: 1, width: size * 2, color: { dark: '#071d48', light: '#ffffff' } }).then(setSrc).catch(() => setSrc('')); }, [url, size]);
+  useEffect(() => { QRCode.toDataURL(url, { margin: 1, width: size * 2, color: { dark: '#00008F', light: '#ffffff' } }).then(setSrc).catch(() => setSrc('')); }, [url, size]);
   return src ? <img className="qr" src={src} width={size} height={size} alt={`QR code สำหรับเข้าร่วม ${url}`} /> : <div className="qr" style={{ width: size, height: size }} />;
 }
 
@@ -100,4 +102,42 @@ export function Wall({ level, compact }: { level: number; compact?: boolean }) {
     </div>
     <div className="wall-text"><small>กำแพงลูกค้า</small><b>{label}</b>{!compact && <em>{level}%</em>}</div>
   </div>;
+}
+
+// 🔊 / 🔇 toggle. Tapping it also unlocks audio (browsers need a user gesture first).
+export function SoundToggle({ dark }: { dark?: boolean }) {
+  const { on, toggle } = useSound();
+  return <button type="button" className={`icon-btn sound-btn ${dark ? 'icon-btn-dark' : ''}`} onClick={toggle} aria-pressed={on} aria-label={on ? 'ปิดเสียง' : 'เปิดเสียง'} title={on ? 'ปิดเสียง' : 'เปิดเสียง'}>
+    {on ? <Volume2 size={18} /> : <VolumeX size={18} />}
+  </button>;
+}
+
+// Lightweight confetti burst (canvas, ~2.5 s). Respects reduced-motion.
+export function Confetti({ fire }: { fire: unknown }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const c = ref.current; if (!c || !fire || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const g = c.getContext('2d'); if (!g) return;
+    c.width = innerWidth; c.height = innerHeight;
+    const colors = ['#00008F', '#FF1721', '#ffffff', '#027180', '#1E8A49', '#ffcf3d'];
+    const bits = Array.from({ length: 160 }, () => ({
+      x: c.width / 2 + (Math.random() - .5) * c.width * .3, y: c.height * .35, vx: (Math.random() - .5) * 14, vy: -Math.random() * 14 - 4,
+      r: Math.random() * Math.PI, vr: (Math.random() - .5) * .3, w: 6 + Math.random() * 8, h: 4 + Math.random() * 6, c: colors[Math.floor(Math.random() * colors.length)],
+    }));
+    let frame = 0, id = 0;
+    const draw = () => {
+      g.clearRect(0, 0, c.width, c.height);
+      for (const b of bits) { b.vy += .35; b.x += b.vx; b.y += b.vy; b.r += b.vr; g.save(); g.translate(b.x, b.y); g.rotate(b.r); g.fillStyle = b.c; g.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); g.restore(); }
+      if (++frame < 160) id = requestAnimationFrame(draw); else g.clearRect(0, 0, c.width, c.height);
+    };
+    draw();
+    return () => cancelAnimationFrame(id);
+  }, [fire]);
+  return <canvas ref={ref} className="confetti" aria-hidden="true" />;
+}
+
+// Play a sound effect once each time `key` changes to a new truthy value.
+export function useSfx(name: Parameters<typeof play>[0], key: unknown) {
+  const last = useRef<unknown>(undefined);
+  useEffect(() => { if (key && key !== last.current) { last.current = key; play(name); } }, [name, key]);
 }
