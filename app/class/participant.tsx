@@ -113,8 +113,8 @@ function Quiz({ q, me, now: serverNow, onError }: { q: QuizView; me: Me; now: nu
       <span className="qp-kicker">เกมทาย SPIN</span>
       <h1>คุณเข้าเกมแล้ว!</h1>
       <p className="qp-name">{me.name}</p>
-      <p>ดูชื่อคุณบนจอหน้าห้อง · {q.total} ข้อ · ข้อละ {q.timeLimit} วินาที</p>
-      <p className="qp-small">ตอบถูก + เร็ว = คะแนนมาก</p>
+      <p>ดูชื่อคุณบนจอหน้าห้อง · {q.total} ข้อ · ข้อละ {q.timeLimit} วินาที · สูงสุด {q.maxPoints.toLocaleString()} คะแนน/ข้อ</p>
+      <p className="qp-small">{q.speedBonus ? 'ตอบถูก + เร็ว = คะแนนมาก' : 'ตอบถูกได้คะแนนเต็ม ไม่ต้องรีบ'}</p>
     </div>
     <ChoiceLegend compact />
   </section>;

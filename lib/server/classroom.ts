@@ -19,7 +19,7 @@ export type Reveal = {
 };
 export type QuizActivity = {
   kind: 'quiz'; id: string; phase: 'lobby' | 'question' | 'reveal' | 'final';
-  order: number[]; timeLimit: number; index: number; shownAt?: number | null; openedAt: number | null; closesAt: number | null;
+  order: number[]; timeLimit: number; maxPoints?: number; speedBonus?: boolean; index: number; shownAt?: number | null; openedAt: number | null; closesAt: number | null;
   scores: Record<string, Score>; reveal: Reveal | null;
 };
 export type FeedbackSummary = {
@@ -63,10 +63,14 @@ export function shuffle<T>(items: T[], random = Math.random) {
   return a;
 }
 
-export function points(correct: boolean, ms: number, limitMs: number) {
+export const pointOptions = [100, 500, 1000, 2000];
+
+// Correct answers earn between half and the full maximum, depending on speed (or always the maximum without speed bonus).
+export function points(correct: boolean, ms: number, limitMs: number, max = 1000, speedBonus = true) {
   if (!correct) return 0;
+  if (!speedBonus) return max;
   const t = Math.min(Math.max(ms, 0), limitMs);
-  return Math.round(1000 - 500 * (t / limitMs));
+  return Math.round(max - (max / 2) * (t / limitMs));
 }
 
 // Earliest answer per person wins; answers after the deadline (plus a small network grace) are ignored.
@@ -86,7 +90,7 @@ export function scoreQuestion(quiz: QuizActivity, answers: Answer[]): QuizActivi
     const ok = a.choice === item.answer;
     const s = scores[a.pid] ??= { name: a.name, score: 0, correct: 0, ms: 0, last: 0, streak: 0 };
     s.name = a.name;
-    s.last = points(ok, a.ms, limitMs);
+    s.last = points(ok, a.ms, limitMs, quiz.maxPoints ?? 1000, quiz.speedBonus ?? true);
     s.score += s.last;
     if (ok) { s.correct++; s.ms += Math.min(a.ms, limitMs); s.streak++; } else s.streak = 0;
   }
@@ -171,11 +175,13 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
     case 'quiz-setup': {
       const count = Math.min(Math.max(Math.round(Number(b.count) || 10), 3), 20, quizBank.length);
       const timeLimit = [10, 15, 20, 30].includes(Number(b.timeLimit)) ? Number(b.timeLimit) : 20;
+      const maxPoints = pointOptions.includes(Number(b.maxPoints)) ? Number(b.maxPoints) : 1000;
+      const speedBonus = b.speedBonus !== false;
       // Keep the S/P/I/N mix balanced whatever the count.
       const byStage = choices.map(k => shuffle(quizBank.filter(q => q.answer === k).map(q => q.id)));
       const order: number[] = [];
       for (let i = 0; order.length < count; i++) { const pool = byStage[i % 4]; const next = pool.shift(); if (next !== undefined) order.push(next); }
-      s.activity = { kind: 'quiz', id: id(), phase: 'lobby', timeLimit, index: -1, order: shuffle(order), openedAt: null, closesAt: null, scores: {}, reveal: null };
+      s.activity = { kind: 'quiz', id: id(), phase: 'lobby', timeLimit, maxPoints, speedBonus, index: -1, order: shuffle(order), openedAt: null, closesAt: null, scores: {}, reveal: null };
       return s;
     }
     case 'quiz-open': {
@@ -249,7 +255,7 @@ export function publicState(state: ClassState, people: number, now = Date.now(),
   return {
     ...base,
     activity: {
-      kind: a.kind, id: a.id, phase: a.phase, timeLimit: a.timeLimit, index: a.index, total: a.order.length,
+      kind: a.kind, id: a.id, phase: a.phase, timeLimit: a.timeLimit, maxPoints: a.maxPoints ?? 1000, speedBonus: a.speedBonus ?? true, index: a.index, total: a.order.length,
       shownAt: a.shownAt ?? a.openedAt, openedAt: a.openedAt, closesAt: a.closesAt, answered, reveal: a.reveal,
       question: item ? { context: item.context, line: item.line } : null,
       board: board.slice(0, 10).map(({ pid, name, score, correct, last, streak }) => ({ pid, name, score, correct, last, streak })),

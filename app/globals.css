@@ -930,3 +930,5 @@ mark { background: linear-gradient(transparent 58%, var(--yellow) 58% 92%, trans
 .qp-name { font-family: var(--font-ui); }
 .qp-tile { padding: 16px 10px; }
 .answer-count b { opacity: 1; }
+.seg-tight { display: grid; grid-template-columns: repeat(4, 1fr); }
+.seg-tight button { padding: 8px 2px; font-size: 14px; min-width: 0; }

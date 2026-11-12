@@ -79,7 +79,7 @@ function QuizScreen({ q, now: serverNow, join, people, names }: { q: QuizView; n
   const { intro } = useQuizSound(q, now);
 
   if (q.phase === 'lobby') return <section className="display-center">
-    <span className="display-kicker"><Ico name="target" /> เกมทาย SPIN · {q.total} ข้อ · ข้อละ {q.timeLimit} วินาที</span>
+    <span className="display-kicker"><Ico name="target" /> เกมทาย SPIN · {q.total} ข้อ · ข้อละ {q.timeLimit} วินาที · สูงสุด {q.maxPoints.toLocaleString()} คะแนน/ข้อ</span>
     <h1 className="display-hero">ประโยคนี้คือ S, P, I หรือ N?</h1>
     <JoinPanel join={join} people={people} />
     <NameBubbles names={names} />

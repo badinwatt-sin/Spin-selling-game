@@ -15,6 +15,9 @@ test('faster correct answers score more; wrong scores zero', () => {
   assert.equal(points(true, 20000, 20000), 500);
   assert.ok(points(true, 3000, 20000) > points(true, 9000, 20000));
   assert.equal(points(false, 0, 20000), 0);
+  assert.equal(points(true, 0, 20000, 2000), 2000);
+  assert.equal(points(true, 20000, 20000, 100), 50);
+  assert.equal(points(true, 15000, 20000, 500, false), 500, 'no speed bonus: always the max');
 });
 
 test('quiz flow: setup, hidden answer, scoring, leaderboard, final', () => {
@@ -44,6 +47,13 @@ test('quiz flow: setup, hidden answer, scoring, leaderboard, final', () => {
   const board = leaderboard(scored.scores);
   assert.deepEqual(board.map(x => x.pid), ['fast', 'slow', 'miss']);
   assert.equal(board[2].score, 0);
+  const flat = scoreQuestion({ ...(s.activity as QuizActivity), maxPoints: 500, speedBonus: false }, [
+    { pid: 'a', name: 'A', choice: item.answer, ms: 100 }, { pid: 'b', name: 'B', choice: item.answer, ms: 9000 },
+  ]);
+  assert.deepEqual(Object.values(flat.scores).map(x => x.score), [500, 500]);
+  const custom = controlClass(newClass(0), { action: 'quiz-setup', count: 5, timeLimit: 20, maxPoints: 2000, speedBonus: false }, 1).activity as QuizActivity;
+  assert.equal(custom.maxPoints, 2000); assert.equal(custom.speedBonus, false);
+  assert.equal((controlClass(newClass(0), { action: 'quiz-setup', count: 5, maxPoints: 777 }, 1).activity as QuizActivity).maxPoints, 1000, 'unknown value falls back to 1000');
   s = { ...s, activity: scored };
   s = controlClass(s, { action: 'quiz-final', activityId: scored.id }, 30);
   assert.equal((s.activity as QuizActivity).phase, 'final');

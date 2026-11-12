@@ -105,6 +105,8 @@ function Login({ ready, onDone }: { ready: boolean; onDone: () => void }) {
 function Start({ act, busy, data }: { act: Act; busy: boolean; data: ClassView }) {
   const [count, setCount] = useState(10);
   const [time, setTime] = useState(20);
+  const [maxPoints, setMaxPoints] = useState(1000);
+  const [speedBonus, setSpeedBonus] = useState(true);
   const [stage, setStage] = useState<StageKey>('S');
   const [pMinutes, setPMinutes] = useState(3);
   const [pScenario, setPScenario] = useState(-1);
@@ -132,7 +134,7 @@ function Start({ act, busy, data }: { act: Act; busy: boolean; data: ClassView }
         </div>
         <button className="btn btn-primary btn-lg btn-block" disabled={busy}><Play size={20} /> เริ่ม Post-it</button>
       </form>
-      <form className="card activity" onSubmit={e => { e.preventDefault(); act({ action: 'quiz-setup', count, timeLimit: time }); }}>
+      <form className="card activity" onSubmit={e => { e.preventDefault(); act({ action: 'quiz-setup', count, timeLimit: time, maxPoints, speedBonus }); }}>
         <Sticker name="target" tone="red" size={26} tilt={4} />
         <h2>เกมทาย SPIN</h2>
         <p>ขึ้นประโยคของตัวแทน ให้ทั้งห้องตอบว่าเป็น S / P / I / N ตอบถูกและเร็วได้คะแนนมาก สรุป 3 อันดับแรก (คลัง 40 ข้อ สุ่มแบบสมดุล)</p>
@@ -141,6 +143,16 @@ function Start({ act, busy, data }: { act: Act; busy: boolean; data: ClassView }
         </label>
         <div className="field">เวลาต่อข้อ
           <div className="segmented">{[10, 15, 20, 30].map(t => <button type="button" key={t} className={time === t ? 'on' : ''} onClick={() => setTime(t)}>{t} วิ</button>)}</div>
+        </div>
+        <div className="field">คะแนนสูงสุดต่อข้อ
+          <div className="segmented seg-tight">{[100, 500, 1000, 2000].map(p => <button type="button" key={p} className={maxPoints === p ? 'on' : ''} onClick={() => setMaxPoints(p)}>{p.toLocaleString()}</button>)}</div>
+        </div>
+        <div className="field">วิธีคิดคะแนน
+          <div className="segmented">
+            <button type="button" className={speedBonus ? 'on' : ''} onClick={() => setSpeedBonus(true)}>ถูก + เร็ว</button>
+            <button type="button" className={!speedBonus ? 'on' : ''} onClick={() => setSpeedBonus(false)}>ถูกได้เต็ม</button>
+          </div>
+          <small className="muted">{speedBonus ? `ตอบถูกได้ ${(maxPoints / 2).toLocaleString()}–${maxPoints.toLocaleString()} ตามความเร็ว` : `ตอบถูกได้ ${maxPoints.toLocaleString()} ทุกคน ไม่คิดความเร็ว`} · เต็มทั้งเกม {(maxPoints * count).toLocaleString()} คะแนน</small>
         </div>
         <button className="btn btn-primary btn-lg btn-block" disabled={busy}><Play size={20} /> เตรียมเกม ({count} ข้อ)</button>
       </form>
@@ -174,7 +186,7 @@ function QuizControl({ q, now: serverNow, act, busy }: { q: QuizView; now: numbe
   }, [now, q.phase, q.closesAt, key, act, busy]);
   const last = q.index + 1 >= q.total;
   return <>
-    <h1 className="admin-title"><Ico name="target" /> เกมทาย SPIN <small>{q.total} ข้อ · ข้อละ {q.timeLimit} วินาที</small></h1>
+    <h1 className="admin-title"><Ico name="target" /> เกมทาย SPIN <small>{q.total} ข้อ · ข้อละ {q.timeLimit} วินาที · สูงสุด {q.maxPoints.toLocaleString()} คะแนน/ข้อ{q.speedBonus ? '' : ' (ไม่คิดความเร็ว)'}</small></h1>
     {q.phase === 'lobby' && <div className="card control">
       <p>ให้ผู้เรียนสแกน QR เข้าร่วม แล้วเปิดจอ Live ขึ้นโปรเจกเตอร์</p>
       <button type="button" data-primary className="btn btn-primary btn-xl" disabled={busy} onClick={() => act({ action: 'quiz-open' })}><Play size={22} /> เปิดข้อที่ 1 <Key /></button>
