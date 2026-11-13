@@ -1012,3 +1012,76 @@ button.postit-star:hover { color: #e59a00; }
 .postit-wall-admin .postit-star { width: 30px; height: 30px; font-size: 17px; }
 .postit-status-action { margin-left: auto; }
 .postit-wall-admin { max-height: min(56vh, 600px); }
+
+/* =====================================================================
+   v7 · Responsive pass (UX/UI audit at 375 / 768 / 1440)
+   ===================================================================== */
+html, body { overflow-x: clip; }
+.nowrap { white-space: nowrap; }
+.eyebrow { font-size: 13px; letter-spacing: .01em; }
+
+/* 1. advisor live play never wider than the phone */
+.play { grid-template-columns: minmax(0, 1fr); }
+.live-bar { min-width: 0; }
+@media (max-width: 420px) {
+  .live-bar { gap: 6px; padding: 6px; }
+  .live-bar .wall-text { display: none; }
+  .mini-steps { gap: 4px; }
+  .mini-step { width: 36px; height: 40px; font-size: 18px; }
+}
+/* 2. disabled dock buttons are solid, dock fades in quickly */
+.dock { background: linear-gradient(#f6f2ea00, var(--paper) 16px); }
+.dock .btn:disabled { opacity: 1; background: #cfd0ea; color: #3a3a6a; border-color: #0b0b3b55; box-shadow: none; }
+/* 3. back button stays narrow so "next" fits on one line */
+.play .dock > .btn-ghost:first-child { flex: 0 0 76px; padding: 0 10px; }
+.dock .btn-primary { white-space: nowrap; }
+/* 4. pair top bar stays on one row on small phones */
+@media (max-width: 420px) {
+  .pair .topbar-right { flex-wrap: nowrap; gap: 6px; }
+  .pair .role-pill, .pair .code-pill, .pair .round-pill { padding: 5px 9px; font-size: 13px; }
+  .pair .code-pill svg { display: none; }
+  .pair .icon-btn { width: 36px; height: 36px; flex: none; }
+}
+/* 5. home hero heading fits its column */
+@media (min-width: 980px) { .hero-copy h1 { font-size: clamp(56px, 5.4vw, 78px); } }
+@media (max-width: 380px) { .hero-copy h1 { font-size: 40px; } }
+/* 6. Post-it prompt doesn't fill the phone */
+.role-hero.postit-hero h1 { font-size: clamp(20px, 5.2vw, 30px); line-height: 1.35; }
+/* 7. quiz legend one column on phones */
+@media (max-width: 480px) { .qp .legend-compact { grid-template-columns: 1fr; } }
+/* 8. trainer console: 2 columns on tablet */
+@media (min-width: 720px) and (max-width: 1099px) { .activity-cards { grid-template-columns: 1fr 1fr; } }
+/* 9. keyboard hints hidden on touch devices */
+@media (hover: none) and (pointer: coarse) { .kbd { display: none; } .admin-side > p.muted.small { display: none; } }
+/* 10. ticker spans the full viewport without sideways scroll */
+.ticker { margin-inline: calc(50% - 50vw); }
+/* 11. consistent content widths */
+.play.with-dock { max-width: 720px; margin-inline: auto; }
+@media (min-width: 720px) { .qp-result { max-width: 720px; margin: 0 auto 8px; } }
+/* 12. join button breathing room */
+.join-card .btn-block { margin-top: 16px; }
+/* 13. learn page line length + balanced impact grid */
+.learn-wall p, .learn-section > p { max-width: 68ch; }
+@media (min-width: 980px) {
+  .impact-grid { grid-template-columns: repeat(6, 1fr); }
+  .impact-grid li { grid-column: span 2; }
+  .impact-grid li:nth-child(n+4) { grid-column: span 3; }
+}
+/* 14. learn chips stay reachable on phones */
+@media (max-width: 719px) {
+  .learn-nav { position: sticky; top: 0; z-index: 6; background: var(--paper); margin-inline: -16px; padding: 8px 16px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .learn-nav::-webkit-scrollbar { display: none; }
+  .learn-nav a { flex: none; min-height: 40px; display: inline-flex; align-items: center; }
+}
+/* 15. disclosures show they can open */
+.disclosure > summary { list-style: none; gap: 8px; }
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure > summary::after { content: '▾'; margin-left: auto; transition: transform .2s; }
+.disclosure[open] > summary::after { transform: rotate(180deg); }
+/* tablet home hero: two columns */
+@media (min-width: 720px) and (max-width: 979px) {
+  .hero-x { grid-template-columns: 1.2fr 1fr; }
+  .hero-hand { transform: scale(.78); transform-origin: left center; }
+}
+/* Post-it status: timer as its own chip */
+.postit-left { white-space: nowrap; }

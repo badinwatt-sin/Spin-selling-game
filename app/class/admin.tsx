@@ -302,7 +302,7 @@ function PostitControl({ p, people, now: serverNow, act, busy }: { p: PostitView
       <div className="postit-status">
         <span className={`live-pill ${p.phase === 'writing' ? 'on' : ''}`}>{p.phase === 'writing' ? '● LIVE · ขึ้นจอทันทีที่ส่ง' : 'ปิดรับแล้ว'}</span>
         <b>{p.written}</b> / {people} คนแปะแล้ว
-        {p.phase === 'writing' && <span className="muted"> · {left > 0 ? `เหลือ ${mmss(left)}` : 'หมดเวลา'}</span>}
+        {p.phase === 'writing' && <span className="muted postit-left">{left > 0 ? `เหลือ ${mmss(left)}` : 'หมดเวลา'}</span>}
         <span className="postit-status-action">{p.phase === 'writing'
           ? <button type="button" data-primary={open ? undefined : true} className="btn btn-primary" disabled={busy} onClick={() => act({ action: 'postit-reveal' })}>ปิดรับ Post-it <Key /></button>
           : <button type="button" data-primary={open ? undefined : true} className="btn btn-primary" disabled={busy} onClick={() => act({ action: 'clear' })}>จบกิจกรรม <ArrowRight size={18} /> <Key /></button>}</span>

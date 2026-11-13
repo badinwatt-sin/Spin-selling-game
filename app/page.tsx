@@ -23,7 +23,7 @@ export default function Home() {
     <section className="hero-x">
       <div className="hero-copy">
         <span className="tag">Course · Consultative Selling for Life Insurance</span>
-        <h1>ถามให้ถูก<br />ลูกค้า<mark>เปิดใจ</mark>เอง</h1>
+        <h1>ถามให้ถูก<br /><span className="nowrap">ลูกค้า<mark>เปิดใจ</mark>เอง</span></h1>
         <p>ห้องเรียน SPIN Selling สำหรับตัวแทนประกันชีวิต เปลี่ยนจากคนขายเป็นที่ปรึกษา ด้วยคำถาม 4 ขั้นที่ใช้ได้จริงในการคุยกับลูกค้า</p>
         <div className="hero-cta">
           <a className="btn btn-primary btn-lg" href="/pair">เริ่มฝึก Role Play <ArrowRight size={20} /></a>
