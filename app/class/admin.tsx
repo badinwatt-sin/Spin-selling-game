@@ -303,14 +303,14 @@ function PostitControl({ p, people, now: serverNow, act, busy }: { p: PostitView
         <span className={`live-pill ${p.phase === 'writing' ? 'on' : ''}`}>{p.phase === 'writing' ? '● LIVE · ขึ้นจอทันทีที่ส่ง' : 'ปิดรับแล้ว'}</span>
         <b>{p.written}</b> / {people} คนแปะแล้ว
         {p.phase === 'writing' && <span className="muted"> · {left > 0 ? `เหลือ ${mmss(left)}` : 'หมดเวลา'}</span>}
+        <span className="postit-status-action">{p.phase === 'writing'
+          ? <button type="button" data-primary={open ? undefined : true} className="btn btn-primary" disabled={busy} onClick={() => act({ action: 'postit-reveal' })}>ปิดรับ Post-it <Key /></button>
+          : <button type="button" data-primary={open ? undefined : true} className="btn btn-primary" disabled={busy} onClick={() => act({ action: 'clear' })}>จบกิจกรรม <ArrowRight size={18} /> <Key /></button>}</span>
       </div>
       <p className="muted small">แตะ Post-it เพื่อขยายเต็มจอ (ขึ้นบนจอ Live ด้วย) · แตะ ★ เพื่อติดดาวคำถามตัวอย่างที่ดี</p>
       {notes.length === 0 ? <div className="postit-empty">ยังไม่มีใครส่ง Post-it · ใบแรกจะขึ้นตรงนี้ทันที</div>
         : <div className="postit-wall postit-wall-admin">{notes.map((n, i) => <PostitCard key={n.pid ?? i} n={n} i={i} color={s.color}
           onOpen={() => focus(n.pid ?? null)} onStar={() => star(n.pid)} />)}</div>}
-      {p.phase === 'writing'
-        ? <button type="button" data-primary={open ? undefined : true} className="btn btn-primary btn-xl" disabled={busy} onClick={() => act({ action: 'postit-reveal' })}>ปิดรับ Post-it <Key /></button>
-        : <button type="button" data-primary={open ? undefined : true} className="btn btn-primary btn-lg" disabled={busy} onClick={() => act({ action: 'clear' })}>จบกิจกรรม <ArrowRight size={20} /> <Key /></button>}
     </div>
     {open && <PostitSpotlight n={open} color={s.color} stage={`${s.key} · ${s.name}`} onClose={() => focus(null)} onStar={() => star(open.pid)}
       onPrev={notes.length > 1 ? () => step(-1) : undefined} onNext={notes.length > 1 ? () => step(1) : undefined} />}

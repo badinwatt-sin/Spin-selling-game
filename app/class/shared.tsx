@@ -1,4 +1,5 @@
 'use client';
+import { useLayoutEffect, useRef } from 'react';
 import { api, usePoll } from '@/lib/client';
 import type { PublicClass } from '@/lib/server/classroom';
 import { criterionColor, stages, type StageKey } from '@/lib/spin';
@@ -67,14 +68,33 @@ export type WallNote = { pid?: string; name: string; text: string; star: boolean
 
 // One Post-it. Text always wraps inside the note (even long unbroken strings) and is clamped;
 // the trainer opens the full text with the spotlight.
-export function PostitCard({ n, color, i, onOpen, onStar, big, fresh }: {
-  n: WallNote; color: string; i: number; onOpen?: () => void; onStar?: () => void; big?: boolean; fresh?: boolean;
+export function PostitCard({ n, color, i, onOpen, onStar, big, fresh, fit }: {
+  n: WallNote; color: string; i: number; onOpen?: () => void; onStar?: () => void; big?: boolean; fresh?: boolean; fit?: boolean;
 }) {
   const style = { '--c': color, '--r': `${((i * 37) % 5) - 2}deg` } as React.CSSProperties;
-  return <div className={`postit-note ${n.star ? 'star' : ''} ${big ? 'postit-big' : ''} ${fresh ? 'postit-fresh' : ''}`} style={style}>
+  const noteRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  // On the projector each note has a fixed cell: show as many whole lines as fit, then "…".
+  useLayoutEffect(() => {
+    if (!fit) return;
+    const note = noteRef.current, text = textRef.current;
+    if (!note || !text) return;
+    const apply = () => {
+      const cs = getComputedStyle(note), ts = getComputedStyle(text);
+      const foot = note.querySelector<HTMLElement>('.postit-foot')?.offsetHeight ?? 0;
+      const free = note.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - foot - parseFloat(cs.rowGap || '0');
+      const line = parseFloat(ts.lineHeight) || parseFloat(ts.fontSize) * 1.45;
+      text.style.setProperty('-webkit-line-clamp', String(Math.max(1, Math.floor(free / line))));
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
+    ro.observe(note);
+    return () => ro.disconnect();
+  }, [fit, n.text]);
+  return <div ref={noteRef} className={`postit-note ${n.star ? 'star' : ''} ${big ? 'postit-big' : ''} ${fresh ? 'postit-fresh' : ''} ${fit ? 'postit-fit' : ''}`} style={style}>
     {onOpen ? <button type="button" className="postit-open" onClick={onOpen} aria-label={`เปิดดู Post-it ของ ${n.name}`}>
-      <span className="postit-text">{n.text}</span>
-    </button> : <span className="postit-text">{n.text}</span>}
+      <span ref={textRef} className="postit-text">{n.text}</span>
+    </button> : <span ref={textRef} className="postit-text">{n.text}</span>}
     <span className="postit-foot">
       <small>{n.name}</small>
       {onStar ? <button type="button" className={`postit-star ${n.star ? 'on' : ''}`} onClick={onStar} aria-pressed={n.star} aria-label={n.star ? 'เอาดาวออก' : 'ติดดาว'}>★</button>

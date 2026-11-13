@@ -164,7 +164,11 @@ function PostitScreen({ p, now: serverNow, join, people }: { p: PostitView; now:
   useSfx('reveal', p.focus ?? null);
   useSfx('timeUp', p.phase === 'writing' && left <= 0 ? p.id : null);
   const open = notes.find(n => n.pid && n.pid === p.focus);
-  const many = notes.length > 12;
+  // Grid sized to the class: up to ~24 notes fit one projector screen without scrolling.
+  const n = notes.length;
+  const cols = n <= 3 ? Math.max(n, 1) : n <= 4 ? 4 : n <= 6 ? 3 : n <= 8 ? 4 : n <= 12 ? 4 : n <= 20 ? 5 : 6;
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const scroll = rows > 4;
 
   return <section className="display-postit">
     <div className="postit-bar" style={{ '--c': s.color } as React.CSSProperties}>
@@ -182,7 +186,8 @@ function PostitScreen({ p, now: serverNow, join, people }: { p: PostitView; now:
     </div>
     {notes.length === 0
       ? <div className="postit-waiting"><p>รอ Post-it ใบแรก…</p><span>{postit[p.stage].prompt}</span></div>
-      : <div className={`postit-wall ${many ? 'postit-wall-dense' : ''}`}>{notes.map((n, i) => <PostitCard key={n.pid ?? i} n={n} i={i} color={s.color} big={!many} fresh={!!n.pid && fresh.has(n.pid)} />)}</div>}
+      : <div className={`postit-wall postit-wall-fit rows-${Math.min(rows, 5)} ${scroll ? 'postit-wall-scroll' : ''}`} style={{ '--cols': cols, '--rows': Math.min(rows, 4) } as React.CSSProperties}>
+        {notes.map((x, i) => <PostitCard key={x.pid ?? i} n={x} i={i} color={s.color} fit fresh={!!x.pid && fresh.has(x.pid)} />)}</div>}
     {open && <PostitSpotlight n={open} color={s.color} stage={`${s.key} · ${s.name}`} />}
   </section>;
 }
