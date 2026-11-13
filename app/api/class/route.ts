@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GameError } from '@/lib/server/game';
 import { choices, closeFeedback, controlClass, makeBallot, makeNote, publicState, scoreQuestion, summarizeFeedback } from '@/lib/server/classroom';
 import {
-  cached, countBallots, countNotes, listPlayers, forget, listAnswers, playerToken, readBallots, readNotes, readPlayer, readState,
+  cached, countBallots, listPlayers, forget, listAnswers, playerToken, readBallots, readNotes, readPlayer, readState,
   registerPlayer, saveAnswer, saveBallot, saveNote, secret, writeState,
 } from '@/lib/server/class-storage';
 import type { StageKey } from '@/lib/spin';
@@ -35,14 +35,15 @@ async function snapshot(screen: boolean, fresh = false) {
   const { state } = fresh ? await readState(now) : await cached('state', 800, () => readState(now));
   const a = state.activity;
   let people = 0, answered = 0, ballots = 0, names: string[] = [];
+  let liveNotes: Awaited<ReturnType<typeof readNotes>> | null = null;
   if (screen) {
     names = await cached(`p:${state.id}`, fresh ? 0 : 1500, () => listPlayers(state.id));
     people = names.length;
     if (a?.kind === 'quiz' && a.phase === 'question') answered = (await listAnswers(state.id, a.id, a.index)).length;
     if (a?.kind === 'feedback' && a.phase !== 'roleplay') ballots = await countBallots(state.id, a.id);
-    if (a?.kind === 'postit' && a.phase === 'writing') answered = await countNotes(state.id, a.id);
+    if (a?.kind === 'postit' && a.phase === 'writing') liveNotes = await cached(`n:${a.id}`, fresh ? 0 : 1500, () => readNotes(state.id, a.id));
   }
-  return { ...publicState(state, people, now, answered, ballots), names: names.slice(-80) };
+  return { ...publicState(state, people, now, answered, ballots, liveNotes), names: names.slice(-80) };
 }
 
 export async function GET(req: NextRequest) {
@@ -132,7 +133,8 @@ export async function POST(req: NextRequest) {
       next = closeFeedback(state, summarizeFeedback(await readBallots(state.id, a.id)));
     } else if (b.action === 'postit-reveal') {
       if (a?.kind !== 'postit' || a.phase !== 'writing' || b.activityId !== a.id) return reply({ error: 'ไม่มีกิจกรรม Post-it ที่เปิดอยู่' }, 409);
-      const notes = (await readNotes(state.id, a.id)).map(n => ({ name: n.name, text: n.text, star: false }));
+      const stars = new Set(a.stars ?? []);
+      const notes = (await readNotes(state.id, a.id)).map(n => ({ pid: n.pid, name: n.name, text: n.text, star: stars.has(n.pid) }));
       next = { ...state, activity: { ...a, phase: 'wall', notes } };
     } else {
       next = controlClass(state, b, now);

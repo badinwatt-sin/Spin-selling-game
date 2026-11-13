@@ -62,3 +62,42 @@ export function ShowtimeTable({ rows, big }: { rows: ShowtimeRow[]; big?: boolea
     </li>)}
   </ol>;
 }
+
+export type WallNote = { pid?: string; name: string; text: string; star: boolean };
+
+// One Post-it. Text always wraps inside the note (even long unbroken strings) and is clamped;
+// the trainer opens the full text with the spotlight.
+export function PostitCard({ n, color, i, onOpen, onStar, big, fresh }: {
+  n: WallNote; color: string; i: number; onOpen?: () => void; onStar?: () => void; big?: boolean; fresh?: boolean;
+}) {
+  const style = { '--c': color, '--r': `${((i * 37) % 5) - 2}deg` } as React.CSSProperties;
+  return <div className={`postit-note ${n.star ? 'star' : ''} ${big ? 'postit-big' : ''} ${fresh ? 'postit-fresh' : ''}`} style={style}>
+    {onOpen ? <button type="button" className="postit-open" onClick={onOpen} aria-label={`เปิดดู Post-it ของ ${n.name}`}>
+      <span className="postit-text">{n.text}</span>
+    </button> : <span className="postit-text">{n.text}</span>}
+    <span className="postit-foot">
+      <small>{n.name}</small>
+      {onStar ? <button type="button" className={`postit-star ${n.star ? 'on' : ''}`} onClick={onStar} aria-pressed={n.star} aria-label={n.star ? 'เอาดาวออก' : 'ติดดาว'}>★</button>
+        : n.star && <span className="postit-star on" aria-label="ติดดาว">★</span>}
+    </span>
+  </div>;
+}
+
+// Full-screen spotlight of a single note, large enough to read from the back of the room.
+export function PostitSpotlight({ n, color, stage, onClose, onStar, onPrev, onNext }: {
+  n: WallNote; color: string; stage: string; onClose?: () => void; onStar?: () => void; onPrev?: () => void; onNext?: () => void;
+}) {
+  return <div className="spotlight" role="dialog" aria-modal="true" aria-label={`Post-it ของ ${n.name}`}>
+    <div className="spotlight-note" style={{ '--c': color } as React.CSSProperties}>
+      <span className="spotlight-stage">{stage}</span>
+      <p>{n.text}</p>
+      <footer><b>— {n.name}</b>{n.star && <span className="spotlight-star">★ คำถามตัวอย่างที่ดี</span>}</footer>
+    </div>
+    {(onClose || onStar || onPrev || onNext) && <div className="spotlight-actions">
+      {onPrev && <button type="button" className="btn btn-ghost" onClick={onPrev}>‹ ก่อนหน้า</button>}
+      {onStar && <button type="button" className="btn btn-ghost" onClick={onStar}>{n.star ? '★ เอาดาวออก' : '☆ ติดดาว'}</button>}
+      {onClose && <button type="button" className="btn btn-primary" onClick={onClose}>ปิด (Esc)</button>}
+      {onNext && <button type="button" className="btn btn-ghost" onClick={onNext}>ถัดไป ›</button>}
+    </div>}
+  </div>;
+}

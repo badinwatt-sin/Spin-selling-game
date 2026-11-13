@@ -1,12 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Maximize, Star } from 'lucide-react';
 import { music, play, unlock } from '@/lib/sound';
 import { mmss, useClock } from '@/lib/client';
 import { Bars, Brand, Confetti, Qr, SoundToggle, StageBadge, useOrigin, useSfx } from '@/components/ui';
 import { criterionColor, showtimeCriteria, stages } from '@/lib/spin';
 import { postit } from '@/lib/content';
-import { ChoiceLegend, Countdown, Podium, ShowtimeTable, stageOf, useClass, type ClassView, type FeedbackView, type PostitView, type QuizView } from './shared';
+import { ChoiceLegend, Countdown, Podium, PostitCard, PostitSpotlight, ShowtimeTable, stageOf, useClass, type ClassView, type FeedbackView, type PostitView, type QuizView, type WallNote } from './shared';
 import { Distribution } from './admin';
 import { Ico, Shape, Sticker } from '@/components/icons';
 
@@ -152,28 +152,38 @@ function PostitScreen({ p, now: serverNow, join, people }: { p: PostitView; now:
   const now = useClock(serverNow, 500);
   const s = stageOf(p.stage);
   const left = p.endsAt - now;
-  const stars = p.notes.filter(n => n.star).length;
+  const notes = p.notes as WallNote[];
+  const stars = notes.filter(n => n.star).length;
+  // Notes arrive live: remember which ones we've shown so new ones pop in with a sound.
+  const seen = useRef<Set<string> | null>(null);
+  const fresh = new Set<string>();
+  if (seen.current) for (const n of notes) if (n.pid && !seen.current.has(n.pid)) fresh.add(n.pid);
+  useEffect(() => { seen.current = new Set(notes.map(n => n.pid ?? '')); });
+  useSfx('join', fresh.size ? notes.length : null);
   useSfx('star', stars || null);
-  useSfx('reveal', p.phase === 'wall' ? p.id : null);
+  useSfx('reveal', p.focus ?? null);
   useSfx('timeUp', p.phase === 'writing' && left <= 0 ? p.id : null);
-  const head = <div className="postit-head" style={{ '--c': s.color } as React.CSSProperties}>
-    <StageBadge k={s.key} size="lg" />
-    <div><span className="display-kicker"><Ico name="note" /> #กิจกรรม Post-it · {s.name}</span><h1>{s.meaning}</h1>{p.scenarioTitle && <p>โจทย์: ลูกค้า{p.scenarioTitle} — {p.scenarioBrief}</p>}</div>
-  </div>;
-  if (p.phase === 'writing') return <section className="display-center">
-    {head}
-    <div className="display-timer">{left > 0 ? mmss(left) : 'หมดเวลา'}</div>
-    <div className="vote-count"><b>{p.written}</b><span>/ {people} คนแปะ Post-it แล้ว</span></div>
-    <JoinPanel join={join} people={people} size={180} />
-  </section>;
-  const notes = [...p.notes].sort((x, y) => Number(y.star) - Number(x.star));
+  const open = notes.find(n => n.pid && n.pid === p.focus);
+  const many = notes.length > 12;
+
   return <section className="display-postit">
-    {head}
-    <div className="postit-wall">{notes.map((n, i) => <div key={i} className={`postit-note ${n.star ? 'star' : ''}`} style={{ '--c': s.color, '--r': `${((i * 37) % 7) - 3}deg` } as React.CSSProperties}>
-      <span>{n.text}</span><small>{n.name}</small>{n.star && <Star className="star-icon" size={26} fill="currentColor" />}</div>)}
-      {notes.length === 0 && <p className="why">ยังไม่มี Post-it</p>}
+    <div className="postit-bar" style={{ '--c': s.color } as React.CSSProperties}>
+      <StageBadge k={s.key} size="lg" />
+      <div className="postit-bar-text">
+        <span className="display-kicker"><Ico name="note" /> #กิจกรรม Post-it · {s.name}</span>
+        <h1>{s.meaning}</h1>
+        {p.scenarioTitle && <p>โจทย์: ลูกค้า{p.scenarioTitle} — {p.scenarioBrief}</p>}
+      </div>
+      <div className="postit-bar-stats">
+        {p.phase === 'writing' ? <b className={`postit-clock ${left < 30_000 ? 'low' : ''}`}>{left > 0 ? mmss(left) : 'หมดเวลา'}</b> : <b className="postit-clock">ปิดรับแล้ว</b>}
+        <span><b>{p.written}</b> / {people} คนแปะแล้ว</span>
+      </div>
+      {p.phase === 'writing' && join.startsWith('http') && <div className="postit-bar-qr"><Qr url={join} size={110} /></div>}
     </div>
-    <p className="postit-hint">{postit[p.stage].prompt}</p>
+    {notes.length === 0
+      ? <div className="postit-waiting"><p>รอ Post-it ใบแรก…</p><span>{postit[p.stage].prompt}</span></div>
+      : <div className={`postit-wall ${many ? 'postit-wall-dense' : ''}`}>{notes.map((n, i) => <PostitCard key={n.pid ?? i} n={n} i={i} color={s.color} big={!many} fresh={!!n.pid && fresh.has(n.pid)} />)}</div>}
+    {open && <PostitSpotlight n={open} color={s.color} stage={`${s.key} · ${s.name}`} />}
   </section>;
 }
 

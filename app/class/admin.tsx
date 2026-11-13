@@ -5,7 +5,7 @@ import { api, errorText, mmss, useClock } from '@/lib/client';
 import { Bars, Brand, Notice, Qr, StageBadge, useOrigin } from '@/components/ui';
 import { showtimeCriteria, stages, type StageKey } from '@/lib/spin';
 import { postit, showtimeRubric } from '@/lib/content';
-import { Countdown, Podium, ShowtimeTable, stageOf, useClass, type ClassView, type FeedbackView, type PostitView, type QuizView } from './shared';
+import { Countdown, Podium, PostitCard, PostitSpotlight, ShowtimeTable, stageOf, useClass, type ClassView, type FeedbackView, type PostitView, type QuizView, type WallNote } from './shared';
 import { Ico, Sticker } from '@/components/icons';
 
 const scenarioNames = ['แม่บ้าน', 'ข้าราชการ', 'พ่อค้า แม่ค้า', 'พนักงานบริษัทเอกชน', 'แพทย์ พยาบาล', 'นักธุรกิจ'];
@@ -271,21 +271,48 @@ function PostitControl({ p, people, now: serverNow, act, busy }: { p: PostitView
   const now = useClock(serverNow, 500);
   const s = stageOf(p.stage);
   const left = p.endsAt - now;
+  const notes = p.notes as WallNote[];
+  const [local, setLocal] = useState<string | null | undefined>(undefined);
+  const focusId = local !== undefined ? local : p.focus;
+  useEffect(() => { setLocal(undefined); }, [p.focus]);
+  const index = notes.findIndex(n => n.pid === focusId);
+  const open = index >= 0 ? notes[index] : null;
+  const focus = (pid: string | null) => { setLocal(pid); void act({ action: 'postit-focus', pid }); };
+  const star = (pid?: string) => pid && act({ action: 'postit-star', pid });
+  const step = (d: number) => { if (notes.length) focus(notes[(index + d + notes.length) % notes.length].pid ?? null); };
+
+  // While a note is open: Esc / Space close it, ← → move between notes.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === ' ') { e.preventDefault(); e.stopImmediatePropagation(); focus(null); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); step(1); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopImmediatePropagation(); step(-1); }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  });
+
   return <>
     <h1 className="admin-title"><Ico name="note" /> Post-it · {s.name}</h1>
     <div className="card control">
       <p className="admin-quote">{postit[p.stage].prompt}</p>
       {p.scenarioTitle && <p>โจทย์ลูกค้า: <b>{p.scenarioTitle}</b> — {p.scenarioBrief}</p>}
       <p className="mentor-hint"><Ico name="compass" /> Mentor: {postit[p.stage].mentorHint}</p>
-      {p.phase === 'writing' ? <>
-        <p className="big-stat"><b>{p.written}</b> / {people} คนแปะแล้ว · {left > 0 ? `เหลือ ${mmss(left)}` : 'หมดเวลา'}</p>
-        <button type="button" data-primary className="btn btn-primary btn-xl" disabled={busy} onClick={() => act({ action: 'postit-reveal' })}>เปิดกระดาน Post-it บนจอ <Key /></button>
-      </> : <>
-        <p className="muted">แตะ <Ico name="star" /> เพื่อติดดาวคำถามตัวอย่างที่ดี ดาวจะขึ้นบนจอทันที</p>
-        <div className="postit-wall postit-wall-admin">{p.notes.map((n, i) => <button type="button" key={i} className={`postit-note ${n.star ? 'star' : ''}`} style={{ '--c': s.color } as React.CSSProperties} disabled={busy} onClick={() => act({ action: 'postit-star', index: i })}>
-          <span>{n.text}</span><small>{n.name}</small>{n.star ? <Star className="star-icon" size={18} fill="currentColor" /> : <Star className="star-icon off" size={18} />}</button>)}</div>
-        <button type="button" data-primary className="btn btn-primary btn-lg" disabled={busy} onClick={() => act({ action: 'clear' })}>จบกิจกรรม <ArrowRight size={20} /> <Key /></button>
-      </>}
+      <div className="postit-status">
+        <span className={`live-pill ${p.phase === 'writing' ? 'on' : ''}`}>{p.phase === 'writing' ? '● LIVE · ขึ้นจอทันทีที่ส่ง' : 'ปิดรับแล้ว'}</span>
+        <b>{p.written}</b> / {people} คนแปะแล้ว
+        {p.phase === 'writing' && <span className="muted"> · {left > 0 ? `เหลือ ${mmss(left)}` : 'หมดเวลา'}</span>}
+      </div>
+      <p className="muted small">แตะ Post-it เพื่อขยายเต็มจอ (ขึ้นบนจอ Live ด้วย) · แตะ ★ เพื่อติดดาวคำถามตัวอย่างที่ดี</p>
+      {notes.length === 0 ? <div className="postit-empty">ยังไม่มีใครส่ง Post-it · ใบแรกจะขึ้นตรงนี้ทันที</div>
+        : <div className="postit-wall postit-wall-admin">{notes.map((n, i) => <PostitCard key={n.pid ?? i} n={n} i={i} color={s.color}
+          onOpen={() => focus(n.pid ?? null)} onStar={() => star(n.pid)} />)}</div>}
+      {p.phase === 'writing'
+        ? <button type="button" data-primary={open ? undefined : true} className="btn btn-primary btn-xl" disabled={busy} onClick={() => act({ action: 'postit-reveal' })}>ปิดรับ Post-it <Key /></button>
+        : <button type="button" data-primary={open ? undefined : true} className="btn btn-primary btn-lg" disabled={busy} onClick={() => act({ action: 'clear' })}>จบกิจกรรม <ArrowRight size={20} /> <Key /></button>}
     </div>
+    {open && <PostitSpotlight n={open} color={s.color} stage={`${s.key} · ${s.name}`} onClose={() => focus(null)} onStar={() => star(open.pid)}
+      onPrev={notes.length > 1 ? () => step(-1) : undefined} onNext={notes.length > 1 ? () => step(1) : undefined} />}
   </>;
 }

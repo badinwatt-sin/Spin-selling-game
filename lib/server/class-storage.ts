@@ -109,17 +109,22 @@ export async function readBallots(sid: string, aid: string) {
 
 // Post-it notes: one per person per activity, editable until the trainer reveals the wall.
 export async function saveNote(sid: string, aid: string, pid: string, name: string, text: string) {
-  await store.write(`${base(sid)}n/${aid}/${pid}.json`, { name, text, at: Date.now() }, { overwrite: true });
+  const path = `${base(sid)}n/${aid}/${pid}.json`;
+  const prev = await store.read<{ at: number }>(path);
+  // Keep the first-submitted time so an edited note stays in its place on the wall.
+  await store.write(path, { name, text, at: prev?.data.at ?? Date.now(), edited: Date.now() }, { overwrite: true });
 }
 export async function countNotes(sid: string, aid: string) {
   return (await store.list(`${base(sid)}n/${aid}/`)).length;
 }
 export async function readNotes(sid: string, aid: string) {
-  const entries = await store.list(`${base(sid)}n/${aid}/`);
-  const out: { name: string; text: string; at: number }[] = [];
+  const prefix = `${base(sid)}n/${aid}/`;
+  const entries = await store.list(prefix);
+  const out: { pid: string; name: string; text: string; at: number }[] = [];
   for (let i = 0; i < entries.length; i += 20) {
-    const batch = await Promise.all(entries.slice(i, i + 20).map(e => store.read<{ name: string; text: string; at: number }>(e.pathname)));
-    for (const b of batch) if (b) out.push(b.data);
+    const slice = entries.slice(i, i + 20);
+    const batch = await Promise.all(slice.map(e => store.read<{ name: string; text: string; at: number }>(e.pathname)));
+    batch.forEach((b, j) => { if (b) out.push({ pid: slice[j].pathname.slice(prefix.length).replace(/\.json$/, ''), ...b.data }); });
   }
-  return out.sort((a, b) => a.at - b.at);
+  return out.sort((a, b) => a.at - b.at || a.pid.localeCompare(b.pid));
 }

@@ -33,10 +33,12 @@ export type FeedbackActivity = {
   startedAt: number; endedAt: number | null; summary: FeedbackSummary | null;
 };
 // Post-it activity from the deck: everyone writes one question for a stage, then the wall is revealed.
-export type Note = { text: string; name: string; star: boolean };
+export type Note = { pid?: string; text: string; name: string; star: boolean };
+export type LiveNote = { pid: string; name: string; text: string; at: number };
 export type PostitActivity = {
   kind: 'postit'; id: string; phase: 'writing' | 'wall'; stage: StageKey; scenario: number | null;
   startedAt: number; endsAt: number; notes: Note[];
+  stars?: string[]; focus?: string | null; // note ids (pid) starred / spotlighted by the trainer
 };
 export type RecapActivity = { kind: 'recap'; id: string };
 export type ShowtimeResult = { id: string; advisor: string; customer: string; scenario: number | null; overall: number | null; criteria: (number | null)[]; count: number };
@@ -216,10 +218,18 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
       return s;
     }
     case 'postit-star': {
-      if (a?.kind !== 'postit' || a.phase !== 'wall') return bad('ยังไม่ได้เปิดกระดาน Post-it');
-      const i = Number(b.index);
-      if (!Number.isInteger(i) || !a.notes[i]) return bad('ไม่พบ Post-it นี้', 400);
-      a.notes[i].star = !a.notes[i].star;
+      if (a?.kind !== 'postit') return bad('ไม่มีกิจกรรม Post-it');
+      const pid = typeof b.pid === 'string' ? b.pid : '';
+      if (!pid) return bad('ไม่พบ Post-it นี้', 400);
+      const stars = new Set(a.stars ?? []);
+      if (stars.has(pid)) stars.delete(pid); else stars.add(pid);
+      a.stars = [...stars];
+      a.notes = a.notes.map(n => n.pid === pid ? { ...n, star: stars.has(pid) } : n);
+      return s;
+    }
+    case 'postit-focus': {
+      if (a?.kind !== 'postit') return bad('ไม่มีกิจกรรม Post-it');
+      a.focus = typeof b.pid === 'string' && b.pid ? b.pid : null;
       return s;
     }
     case 'recap':
@@ -235,7 +245,7 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
 
 // What every screen is allowed to see. The quiz answer is hidden while a question is open,
 // and Post-it notes stay hidden until the trainer reveals the wall.
-export function publicState(state: ClassState, people: number, now = Date.now(), answered = 0, ballots = 0) {
+export function publicState(state: ClassState, people: number, now = Date.now(), answered = 0, ballots = 0, liveNotes: LiveNote[] | null = null) {
   const a = state.activity;
   const showtime = [...(state.showtime ?? [])].sort((x, y) => (y.overall ?? 0) - (x.overall ?? 0))
     .map(x => ({ ...x, scenarioTitle: x.scenario === null ? null : personas[x.scenario].title }));
@@ -248,7 +258,12 @@ export function publicState(state: ClassState, people: number, now = Date.now(),
   }
   if (a.kind === 'postit') {
     const p = a.scenario === null ? null : personas[a.scenario];
-    return { ...base, activity: { ...a, notes: a.phase === 'wall' ? a.notes : [], written: a.phase === 'wall' ? a.notes.length : answered, scenarioTitle: p?.title ?? null, scenarioBrief: p?.brief ?? null } };
+    // Screens (trainer + projector) get notes live while people write; phones get none.
+    const stars = new Set(a.stars ?? []);
+    const notes = a.phase === 'wall' ? a.notes.map(n => ({ ...n, star: n.star || (n.pid ? stars.has(n.pid) : false) }))
+      : (liveNotes ?? []).map(n => ({ pid: n.pid, name: n.name, text: n.text, star: stars.has(n.pid) }));
+    const written = a.phase === 'wall' ? a.notes.length : liveNotes ? liveNotes.length : answered;
+    return { ...base, activity: { ...a, notes, written, focus: a.focus ?? null, scenarioTitle: p?.title ?? null, scenarioBrief: p?.brief ?? null } };
   }
   const item = a.index >= 0 ? quizBank.find(q => q.id === a.order[a.index]) : undefined;
   const board = leaderboard(a.scores);
