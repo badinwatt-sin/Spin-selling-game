@@ -1,19 +1,34 @@
 'use client';
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, usePoll } from '@/lib/client';
 import type { PublicClass } from '@/lib/server/classroom';
 import { criterionColor, stages, type StageKey } from '@/lib/spin';
 import { StageBadge } from '@/components/ui';
+import { parseRoom } from '@/lib/rooms';
 
-export type ClassView = PublicClass & { admin: boolean; adminReady: boolean; names?: string[] };
+export type ClassView = PublicClass & { admin: boolean; adminReady: boolean; names?: string[]; room: number };
+export type RoomInfo = { room: number; label: string | null; activity: string | null; people: number };
 export type QuizView = Extract<NonNullable<PublicClass['activity']>, { kind: 'quiz' }>;
 export type FeedbackView = Extract<NonNullable<PublicClass['activity']>, { kind: 'feedback' }>;
 export type PostitView = Extract<NonNullable<PublicClass['activity']>, { kind: 'postit' }>;
 export type ShowtimeRow = PublicClass['showtime'][number];
 
-export function useClass(as: 'player' | 'display' | 'admin', delay = 1500) {
-  return usePoll<ClassView>(() => api<ClassView>(`/api/class?as=${as}`), delay);
+// The room comes from ?room=1..5 (read after mount so the page can be prerendered). explicit=false means no ?room in the URL.
+export function useRoom() {
+  const [room, setRoom] = useState<{ n: number; explicit: boolean } | null>(null);
+  useEffect(() => { const v = new URLSearchParams(location.search).get('room'); setRoom({ n: parseRoom(v), explicit: v !== null }); }, []);
+  return room;
 }
+export const classUrl = (room: number, query = '') => `/api/class?room=${room}${query}`;
+
+export function useClass(as: 'player' | 'display' | 'admin', room: number | null, delay = 1500) {
+  return usePoll<ClassView>(room ? () => api<ClassView>(classUrl(room, `&as=${as}`)) : null, delay);
+}
+export function useRooms(delay = 5000) {
+  return usePoll<{ rooms: RoomInfo[] }>(() => api(`/api/class?as=rooms`), delay);
+}
+export const activityName = (kind: string | null) =>
+  kind === 'quiz' ? 'เกมทาย SPIN' : kind === 'postit' ? 'Post-it' : kind === 'feedback' ? 'SHOW TIME' : kind === 'recap' ? 'สรุป SHOW TIME' : null;
 
 export function ChoiceLegend({ compact }: { compact?: boolean }) {
   return <div className={`legend ${compact ? 'legend-compact' : ''}`}>

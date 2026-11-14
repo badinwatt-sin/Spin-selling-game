@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeFeedback, controlClass, newClass, points, scoreQuestion, leaderboard, makeBallot, makeNote, summarizeFeedback, publicState, type QuizActivity, type FeedbackActivity, type PostitActivity } from '../lib/server/classroom.ts';
+import { closeFeedback, controlClass, newClass, points, scoreQuestion, leaderboard, makeBallot, makeNote, summarizeFeedback, publicState, revealPostit, notebook, type QuizActivity, type FeedbackActivity, type PostitActivity } from '../lib/server/classroom.ts';
 import { quizBank } from '../lib/server/quiz-bank.ts';
 
 test('quiz bank is balanced and complete', () => {
@@ -104,4 +104,59 @@ test('post-it: notes hidden until the wall is revealed, stars toggle', () => {
   assert.equal((s.activity as PostitActivity).notes[1].star, false, 'unstar after close');
   s = controlClass(s, { action: 'postit-focus', pid: null }, 3100);
   assert.equal((publicState(s, 2, 3200) as any).activity.focus, null);
+});
+
+test('Post-it timer: pause keeps notes open, resume keeps the remaining time, extend adds minutes', async () => {
+  const { postitLeft } = await import('../lib/timer.ts');
+  let s = controlClass(newClass(0), { action: 'postit-start', stage: 'S', minutes: 7 }, 0);
+  let a = s.activity as PostitActivity;
+  assert.equal(postitLeft(a, 0), 7 * 60_000, '7-minute option');
+  assert.equal((controlClass(newClass(0), { action: 'postit-start', minutes: 10 }, 0).activity as PostitActivity).endsAt, 10 * 60_000);
+  s = controlClass(s, { action: 'postit-pause', activityId: a.id }, 60_000);
+  a = s.activity as PostitActivity;
+  assert.equal(postitLeft(a, 300_000), 6 * 60_000, 'clock frozen while paused');
+  // Time is up but the trainer paused: late notes are still accepted.
+  assert.equal(makeNote(a, { activityId: a.id, text: 'คำถามที่ส่งช้า' }, 20 * 60_000), 'คำถามที่ส่งช้า');
+  s = controlClass(s, { action: 'postit-pause', activityId: a.id }, 600_000);
+  a = s.activity as PostitActivity;
+  assert.equal(a.pausedAt, null);
+  assert.equal(postitLeft(a, 600_000), 6 * 60_000, 'resumes with the same time left');
+  // Expired, then extended: restarts from now.
+  assert.throws(() => makeNote(a, { activityId: a.id, text: 'หมดเวลาแล้วนะ' }, a.endsAt + 10_000));
+  s = controlClass(s, { action: 'postit-extend', minutes: 2, activityId: a.id }, a.endsAt + 30_000);
+  a = s.activity as PostitActivity;
+  assert.equal(postitLeft(a, a.endsAt - 2 * 60_000), 2 * 60_000);
+  s = controlClass(s, { action: 'postit-extend', minutes: 3, activityId: a.id }, a.endsAt - 60_000);
+  assert.equal(postitLeft(s.activity as PostitActivity, (s.activity as PostitActivity).endsAt - 4 * 60_000), 4 * 60_000, 'adds to the time left');
+});
+
+test('revealed walls are kept in the class notebook with stars', () => {
+  let s = controlClass(newClass(0), { action: 'postit-start', stage: 'P', scenario: 0 }, 0);
+  const id = s.activity!.id;
+  s = controlClass(s, { action: 'postit-star', pid: 'b', activityId: id }, 10);
+  s = revealPostit(s, [{ pid: 'a', name: 'ต้น', text: 'คำถามแรก' }, { pid: 'b', name: 'ฝน', text: 'คำถามที่สอง' }], 100);
+  assert.equal((s.activity as PostitActivity).phase, 'wall');
+  assert.equal(s.postits?.length, 1);
+  s = controlClass(s, { action: 'postit-star', pid: 'a', activityId: id }, 200);
+  let book = notebook(s, 2);
+  assert.equal(book.room, 2);
+  assert.deepEqual(book.walls[0].notes.map(n => n.star), [true, true], 'stars added after reveal reach the notebook');
+  assert.ok(book.walls[0].scenarioTitle);
+  assert.ok(!('pid' in book.walls[0].notes[0]), 'notebook does not expose player ids');
+  s = controlClass(s, { action: 'clear', activityId: id }, 300);
+  s = controlClass(s, { action: 'postit-start', stage: 'I' }, 400);
+  s = revealPostit(s, [], 500);
+  book = notebook(s, 2);
+  assert.deepEqual(book.walls.map(w => w.stage), ['P', 'I'], 'walls accumulate across rounds');
+  assert.equal(publicState(s, 0, 600).boards, 2);
+});
+
+test('room name survives starting a new class', async () => {
+  const { parseRoom } = await import('../lib/rooms.ts');
+  assert.equal(parseRoom('3'), 3); assert.equal(parseRoom('9'), 1); assert.equal(parseRoom(null), 1);
+  let s = controlClass(newClass(0), { action: 'room-label', label: '  ทีมขาย BKK  ' }, 0);
+  assert.equal(s.label, 'ทีมขาย BKK');
+  s = controlClass(s, { action: 'new-class' }, 10);
+  assert.equal(s.label, 'ทีมขาย BKK');
+  assert.equal(s.postits, undefined);
 });

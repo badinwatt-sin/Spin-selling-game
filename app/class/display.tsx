@@ -6,14 +6,22 @@ import { mmss, useClock } from '@/lib/client';
 import { Bars, Brand, Confetti, Qr, SoundToggle, StageBadge, useOrigin, useSfx } from '@/components/ui';
 import { criterionColor, showtimeCriteria, stages } from '@/lib/spin';
 import { postit } from '@/lib/content';
-import { ChoiceLegend, Countdown, Podium, PostitCard, PostitSpotlight, ShowtimeTable, stageOf, useClass, type ClassView, type FeedbackView, type PostitView, type QuizView, type WallNote } from './shared';
+import { ChoiceLegend, Countdown, Podium, PostitCard, PostitSpotlight, ShowtimeTable, stageOf, useClass, useRoom, type ClassView, type FeedbackView, type PostitView, type QuizView, type WallNote } from './shared';
 import { Distribution } from './admin';
 import { Ico, Shape, Sticker } from '@/components/icons';
+import { postitLeft } from '@/lib/timer';
+import { roomName } from '@/lib/rooms';
 
 export default function Display() {
-  const { data, error } = useClass('display', 1500);
+  const r = useRoom();
+  if (!r) return <main className="display"><div className="loading">กำลังโหลด…</div></main>;
+  return <DisplayRoom room={r.n} />;
+}
+
+function DisplayRoom({ room }: { room: number }) {
+  const { data, error } = useClass('display', room, 1500);
   const origin = useOrigin();
-  const join = `${origin}/class`;
+  const join = origin ? `${origin}/class?room=${room}` : '';
   const a = data?.activity;
   const [armed, setArmed] = useState(false);
   return <main className="display" onClick={() => { if (!armed) { unlock(); setArmed(true); } }}>
@@ -21,6 +29,7 @@ export default function Display() {
     <header className="display-top">
       <Brand />
       <div className="display-meta">
+        <span className="display-room">{roomName(room, data?.label)}</span>
         {data && <span><Ico name="users" /> {data.people} คน</span>}
         {error ? <span className="offline">● เชื่อมต่อใหม่…</span> : <span className="online">● LIVE</span>}
         <SoundToggle dark />
@@ -151,7 +160,8 @@ function FinalPodium({ q }: { q: QuizView }) {
 function PostitScreen({ p, now: serverNow, join, people }: { p: PostitView; now: number; join: string; people: number }) {
   const now = useClock(serverNow, 500);
   const s = stageOf(p.stage);
-  const left = p.endsAt - now;
+  const left = postitLeft(p, now);
+  const paused = Boolean(p.pausedAt);
   const notes = p.notes as WallNote[];
   const stars = notes.filter(n => n.star).length;
   // Notes arrive live: remember which ones we've shown so new ones pop in with a sound.
@@ -162,7 +172,7 @@ function PostitScreen({ p, now: serverNow, join, people }: { p: PostitView; now:
   useSfx('join', fresh.size ? notes.length : null);
   useSfx('star', stars || null);
   useSfx('reveal', p.focus ?? null);
-  useSfx('timeUp', p.phase === 'writing' && left <= 0 ? p.id : null);
+  useSfx('timeUp', p.phase === 'writing' && !paused && left <= 0 ? p.id : null);
   const open = notes.find(n => n.pid && n.pid === p.focus);
   // Grid sized to the class: up to ~24 notes fit one projector screen without scrolling.
   const n = notes.length;
@@ -179,7 +189,10 @@ function PostitScreen({ p, now: serverNow, join, people }: { p: PostitView; now:
         {p.scenarioTitle && <p>โจทย์: ลูกค้า{p.scenarioTitle} — {p.scenarioBrief}</p>}
       </div>
       <div className="postit-bar-stats">
-        {p.phase === 'writing' ? <b className={`postit-clock ${left < 30_000 ? 'low' : ''}`}>{left > 0 ? mmss(left) : 'หมดเวลา'}</b> : <b className="postit-clock">ปิดรับแล้ว</b>}
+        {p.phase === 'writing'
+          ? paused ? <b className="postit-clock paused">{left > 0 ? `⏸ ${mmss(left)}` : '⏸ รอทุกคน'}</b>
+          : <b className={`postit-clock ${left < 30_000 ? 'low' : ''}`}>{left > 0 ? mmss(left) : 'หมดเวลา'}</b>
+          : <b className="postit-clock">ปิดรับแล้ว</b>}
         <span><b>{p.written}</b> / {people} คนแปะแล้ว</span>
       </div>
       {p.phase === 'writing' && join.startsWith('http') && <div className="postit-bar-qr"><Qr url={join} size={110} /></div>}

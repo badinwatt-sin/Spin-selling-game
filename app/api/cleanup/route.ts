@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const stale = async (prefix: string, age: number, keep?: (p: string) => boolean) =>
     (await store.list(prefix)).filter(e => e.uploadedAt < now - age && !(keep?.(e.pathname))).map(e => e.pathname);
   const rooms = await stale(`${root}rooms/`, 4 * 3600_000);
-  const cls = await stale(`${root}class/`, 24 * 3600_000, p => p.endsWith('class/state.json'));
+  const cls = await stale(`${root}class/`, 24 * 3600_000, p => p.endsWith('/state.json'));
   await store.remove([...rooms, ...cls]);
   return Response.json({ deleted: rooms.length + cls.length });
 }

@@ -1,12 +1,13 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { GameError } from '@/lib/server/game';
-import { choices, closeFeedback, controlClass, makeBallot, makeNote, publicState, scoreQuestion, summarizeFeedback } from '@/lib/server/classroom';
+import { choices, closeFeedback, controlClass, makeBallot, makeNote, notebook, publicState, revealPostit, scoreQuestion, summarizeFeedback } from '@/lib/server/classroom';
 import {
-  cached, countBallots, listPlayers, forget, listAnswers, playerToken, readBallots, readNotes, readPlayer, readState,
+  cached, countBallots, listPlayers, forget, listAnswers, peekState, playerToken, readBallots, readNotes, readPlayer, readState,
   registerPlayer, saveAnswer, saveBallot, saveNote, secret, writeState,
 } from '@/lib/server/class-storage';
 import type { StageKey } from '@/lib/spin';
+import { parseRoom, rooms } from '@/lib/rooms';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -30,9 +31,9 @@ function handle(e: unknown) {
   return reply({ error: 'เชื่อมต่อห้องเรียนไม่สำเร็จ กรุณาลองอีกครั้ง' }, 503);
 }
 
-async function snapshot(screen: boolean, fresh = false) {
+async function snapshot(room: number, screen: boolean, fresh = false) {
   const now = Date.now();
-  const { state } = fresh ? await readState(now) : await cached('state', 800, () => readState(now));
+  const { state } = fresh ? await readState(room, now) : await cached(`state:${room}`, 800, () => readState(room, now));
   const a = state.activity;
   let people = 0, answered = 0, ballots = 0, names: string[] = [];
   let liveNotes: Awaited<ReturnType<typeof readNotes>> | null = null;
@@ -43,14 +44,30 @@ async function snapshot(screen: boolean, fresh = false) {
     if (a?.kind === 'feedback' && a.phase !== 'roleplay') ballots = await countBallots(state.id, a.id);
     if (a?.kind === 'postit' && a.phase === 'writing') liveNotes = await cached(`n:${a.id}`, fresh ? 0 : 1500, () => readNotes(state.id, a.id));
   }
-  return { ...publicState(state, people, now, answered, ballots, liveNotes), names: names.slice(-80) };
+  return { ...publicState(state, people, now, answered, ballots, liveNotes), room, names: names.slice(-80) };
+}
+
+// Room picker / home banner: which rooms have a class going, without creating any room.
+async function roomList() {
+  const now = Date.now();
+  return Promise.all(rooms.map(room => cached(`peek:${room}`, 4000, async () => {
+    const state = await peekState(room, now);
+    const people = state ? (await listPlayers(state.id)).length : 0;
+    return { room, label: state?.label ?? null, activity: state?.activity?.kind ?? null, people };
+  })));
 }
 
 export async function GET(req: NextRequest) {
   try {
     const as = req.nextUrl.searchParams.get('as');
+    const room = parseRoom(req.nextUrl.searchParams.get('room'));
+    if (as === 'rooms') return reply({ rooms: await roomList() });
+    if (as === 'board') {
+      const { state } = await cached(`state:${room}`, 800, () => readState(room));
+      return reply(notebook(state, room));
+    }
     const admin = as === 'admin' && isAdmin(req);
-    const data = await snapshot(as === 'display' || admin);
+    const data = await snapshot(room, as === 'display' || admin);
     return reply({ ...data, admin, adminReady: Boolean(secret()) });
   } catch (e) { return handle(e); }
 }
@@ -60,6 +77,8 @@ export async function POST(req: NextRequest) {
     if (Number(req.headers.get('content-length')) > 6000) return reply({ error: 'ข้อมูลมีขนาดใหญ่เกินไป' }, 413);
     const b = await req.json() as Record<string, unknown>;
     const now = Date.now();
+    const room = parseRoom(req.nextUrl.searchParams.get('room'));
+    const load = (ms: number) => cached(`state:${room}`, ms, () => readState(room, now));
 
     if (b.action === 'login') {
       const key = secret();
@@ -81,14 +100,14 @@ export async function POST(req: NextRequest) {
     if (b.action === 'join') {
       const name = typeof b.name === 'string' ? b.name.replace(/\s+/g, ' ').trim().slice(0, 24) : '';
       if (!name) return reply({ error: 'กรุณาใส่ชื่อเล่น' }, 400);
-      const { state } = await cached('state', 800, () => readState(now));
+      const { state } = await load(800);
       const { pid, token } = playerToken(state.id, name);
       await registerPlayer(state.id, pid, name);
       return reply({ token, pid, name, classId: state.id });
     }
 
     if (b.action === 'answer') {
-      const { state } = await cached('state', 500, () => readState(now));
+      const { state } = await load(500);
       const me = readPlayer(bearer(req), state.id);
       const a = state.activity;
       if (a?.kind !== 'quiz' || a.id !== b.activityId || a.phase !== 'question' || a.index !== b.index) {
@@ -103,7 +122,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (b.action === 'ballot') {
-      const { state } = await readState(now);
+      const { state } = await readState(room, now);
       const me = readPlayer(bearer(req), state.id);
       const a = state.activity;
       const ballot = makeBallot(a?.kind === 'feedback' ? a : null, b);
@@ -112,7 +131,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (b.action === 'note') {
-      const { state } = await cached('state', 500, () => readState(now));
+      const { state } = await load(500);
       const me = readPlayer(bearer(req), state.id);
       const a = state.activity;
       const text = makeNote(a?.kind === 'postit' ? a : null, b, now);
@@ -122,7 +141,7 @@ export async function POST(req: NextRequest) {
 
     // Everything below is for the trainer.
     if (!isAdmin(req)) return reply({ error: 'กรุณาเข้าสู่ระบบผู้สอน' }, 401);
-    const { state, etag } = await readState(now);
+    const { state, etag } = await readState(room, now);
     let next = state;
     const a = state.activity;
     if (b.action === 'quiz-reveal') {
@@ -133,14 +152,12 @@ export async function POST(req: NextRequest) {
       next = closeFeedback(state, summarizeFeedback(await readBallots(state.id, a.id)));
     } else if (b.action === 'postit-reveal') {
       if (a?.kind !== 'postit' || a.phase !== 'writing' || b.activityId !== a.id) return reply({ error: 'ไม่มีกิจกรรม Post-it ที่เปิดอยู่' }, 409);
-      const stars = new Set(a.stars ?? []);
-      const notes = (await readNotes(state.id, a.id)).map(n => ({ pid: n.pid, name: n.name, text: n.text, star: stars.has(n.pid) }));
-      next = { ...state, activity: { ...a, phase: 'wall', notes } };
+      next = revealPostit(state, await readNotes(state.id, a.id), now);
     } else {
       next = controlClass(state, b, now);
     }
-    await writeState(next, etag);
+    await writeState(room, next, etag);
     forget();
-    return reply({ ...(await snapshot(true, true)), admin: true, adminReady: true });
+    return reply({ ...(await snapshot(room, true, true)), admin: true, adminReady: true });
   } catch (e) { return handle(e); }
 }

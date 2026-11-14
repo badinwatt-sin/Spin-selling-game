@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { GameError } from './game.ts';
 import { quizBank } from './quiz-bank.ts';
 import { personas } from './personas.ts';
+import { extendMinutes, postitMinutes } from '../timer.ts';
 import { improveTags, showtimeCriteria, strengthTags, type StageKey } from '../spin.ts';
 
 export const choices: StageKey[] = ['S', 'P', 'I', 'N'];
@@ -39,13 +40,19 @@ export type PostitActivity = {
   kind: 'postit'; id: string; phase: 'writing' | 'wall'; stage: StageKey; scenario: number | null;
   startedAt: number; endsAt: number; notes: Note[];
   stars?: string[]; focus?: string | null; // note ids (pid) starred / spotlighted by the trainer
+  pausedAt?: number | null; // clock stopped by the trainer: notes are still accepted, time doesn't run
 };
+// Every revealed wall is kept for the class notebook so people can read or export it again later.
+export type PostitRecord = { id: string; stage: StageKey; scenario: number | null; at: number; notes: Note[] };
+
 export type RecapActivity = { kind: 'recap'; id: string };
 export type ShowtimeResult = { id: string; advisor: string; customer: string; scenario: number | null; overall: number | null; criteria: (number | null)[]; count: number };
 export type ClassState = {
   id: string; startedAt: number; expiresAt: number;
   activity: QuizActivity | FeedbackActivity | PostitActivity | RecapActivity | null;
   showtime?: ShowtimeResult[];
+  postits?: PostitRecord[];
+  label?: string; // optional room name set by the trainer, e.g. "ทีมขาย BKK"
 };
 
 export type Answer = { pid: string; name: string; choice: StageKey; ms: number };
@@ -157,11 +164,36 @@ export function closeFeedback(state: ClassState, summary: FeedbackSummary): Clas
 export function makeNote(activity: PostitActivity | null, b: Record<string, unknown>, now = Date.now()) {
   if (!activity || activity.kind !== 'postit') bad('ตอนนี้ไม่มีกิจกรรม Post-it');
   if (activity!.id !== b.activityId) bad('กิจกรรมเปลี่ยนแล้ว กรุณารีเฟรช');
-  if (activity!.phase !== 'writing' || now > activity!.endsAt + 5000) bad('หมดเวลาเขียน Post-it แล้ว');
+  if (activity!.phase !== 'writing' || (!activity!.pausedAt && now > activity!.endsAt + 5000)) bad('หมดเวลาเขียน Post-it แล้ว');
   const t = text(b.text, 200);
   if (t.length < 5) bad('เขียนคำถามอย่างน้อย 5 ตัวอักษร', 400);
   return t;
 }
+
+// Closing a Post-it round puts its notes on the wall and files the wall in the class notebook.
+export function revealPostit(state: ClassState, notes: { pid: string; name: string; text: string }[], now = Date.now()): ClassState {
+  const a = state.activity;
+  if (a?.kind !== 'postit' || a.phase !== 'writing') return bad('ไม่มีกิจกรรม Post-it ที่เปิดอยู่');
+  const stars = new Set(a.stars ?? []);
+  const wall = notes.map(n => ({ pid: n.pid, name: n.name, text: n.text, star: stars.has(n.pid) }));
+  const record: PostitRecord = { id: a.id, stage: a.stage, scenario: a.scenario, at: now, notes: wall };
+  return {
+    ...state, activity: { ...a, phase: 'wall', notes: wall, pausedAt: null },
+    postits: [...(state.postits ?? []).filter(r => r.id !== a.id), record].slice(-16),
+  };
+}
+
+// The class notebook: every revealed wall, oldest first. Names are the nicknames people typed.
+export function notebook(state: ClassState, room: number) {
+  return {
+    room, label: state.label ?? null, classId: state.id, startedAt: state.startedAt,
+    walls: (state.postits ?? []).map(r => {
+      const p = r.scenario === null ? null : personas[r.scenario];
+      return { id: r.id, stage: r.stage, at: r.at, scenarioTitle: p?.title ?? null, notes: r.notes.map(n => ({ name: n.name, text: n.text, star: n.star })) };
+    }),
+  };
+}
+export type Notebook = ReturnType<typeof notebook>;
 
 // Admin actions that don't need extra data. Reveal / close are finished in the API route with stored answers.
 export function controlClass(state: ClassState, b: Record<string, unknown>, now = Date.now()): ClassState {
@@ -173,7 +205,10 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
   const scenarioOf = (v: unknown) => { const n = Number(v); return Number.isInteger(n) && n >= 0 && n < personas.length ? n : null; };
   switch (b.action) {
     case 'new-class':
-      return newClass(now);
+      return { ...newClass(now), label: s.label };
+    case 'room-label':
+      s.label = text(b.label, 30) || undefined;
+      return s;
     case 'quiz-setup': {
       const count = Math.min(Math.max(Math.round(Number(b.count) || 10), 3), 20, quizBank.length);
       const timeLimit = [10, 15, 20, 30].includes(Number(b.timeLimit)) ? Number(b.timeLimit) : 20;
@@ -213,7 +248,7 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
       return s;
     case 'postit-start': {
       const stage = choices.includes(b.stage as StageKey) ? b.stage as StageKey : 'S';
-      const minutes = [2, 3, 5].includes(Number(b.minutes)) ? Number(b.minutes) : 3;
+      const minutes = postitMinutes.includes(Number(b.minutes)) ? Number(b.minutes) : 3;
       s.activity = { kind: 'postit', id: id(), phase: 'writing', stage, scenario: scenarioOf(b.scenario), startedAt: now, endsAt: now + minutes * 60_000, notes: [] };
       return s;
     }
@@ -225,6 +260,21 @@ export function controlClass(state: ClassState, b: Record<string, unknown>, now 
       if (stars.has(pid)) stars.delete(pid); else stars.add(pid);
       a.stars = [...stars];
       a.notes = a.notes.map(n => n.pid === pid ? { ...n, star: stars.has(pid) } : n);
+      s.postits = s.postits?.map(r => r.id === a.id ? { ...r, notes: r.notes.map(n => n.pid === pid ? { ...n, star: stars.has(pid) } : n) } : r);
+      return s;
+    }
+    case 'postit-pause': {
+      if (a?.kind !== 'postit' || a.phase !== 'writing') return bad('ไม่มีกิจกรรม Post-it ที่เปิดอยู่');
+      if (a.pausedAt) { a.endsAt = now + Math.max(0, a.endsAt - a.pausedAt); a.pausedAt = null; }
+      else a.pausedAt = now;
+      return s;
+    }
+    case 'postit-extend': {
+      if (a?.kind !== 'postit' || a.phase !== 'writing') return bad('ไม่มีกิจกรรม Post-it ที่เปิดอยู่');
+      const m = extendMinutes.includes(Number(b.minutes)) ? Number(b.minutes) : 1;
+      // Adds to whatever is left; once time is up it restarts from now.
+      const at = a.pausedAt ?? now;
+      a.endsAt = Math.max(a.endsAt, at) + m * 60_000;
       return s;
     }
     case 'postit-focus': {
@@ -249,7 +299,7 @@ export function publicState(state: ClassState, people: number, now = Date.now(),
   const a = state.activity;
   const showtime = [...(state.showtime ?? [])].sort((x, y) => (y.overall ?? 0) - (x.overall ?? 0))
     .map(x => ({ ...x, scenarioTitle: x.scenario === null ? null : personas[x.scenario].title }));
-  const base = { id: state.id, now, people, showtime };
+  const base = { id: state.id, now, people, showtime, label: state.label ?? null, boards: state.postits?.length ?? 0 };
   if (!a) return { ...base, activity: null };
   if (a.kind === 'recap') return { ...base, activity: a };
   if (a.kind === 'feedback') {

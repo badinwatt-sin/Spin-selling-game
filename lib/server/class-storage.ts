@@ -5,7 +5,8 @@ import { newClass, type Answer, type Ballot, type ClassState, choices } from './
 import { ConflictError, root, store } from './store';
 import type { StageKey } from '../spin';
 
-const statePath = `${root}class/state.json`;
+// Room 1 keeps the original path so a class already running isn't reset by the upgrade.
+const statePath = (room: number) => room === 1 ? `${root}class/state.json` : `${root}class/room-${room}/state.json`;
 const base = (sid: string) => `${root}class/${sid}/`;
 const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64url');
 const unb64 = (s: string) => Buffer.from(s, 'base64url').toString('utf8');
@@ -19,20 +20,26 @@ export function secret() {
 const sign = (value: string) => createHmac('sha256', (secret() ?? 'spin-class') + ':player').update(value).digest('base64url').slice(0, 22);
 const equal = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 
-export async function readState(now = Date.now()): Promise<{ state: ClassState; etag: string }> {
+export async function readState(room: number, now = Date.now()): Promise<{ state: ClassState; etag: string }> {
   for (let i = 0; i < 3; i++) {
-    const found = await store.read<ClassState>(statePath);
+    const found = await store.read<ClassState>(statePath(room));
     if (found && found.data.expiresAt > now) return { state: found.data, etag: found.etag };
-    const fresh = newClass(now);
+    const fresh: ClassState = { ...newClass(now), label: found?.data.label };
     try {
-      await store.write(statePath, fresh, found ? { etag: found.etag } : { create: true });
+      await store.write(statePath(room), fresh, found ? { etag: found.etag } : { create: true });
     } catch (e) { if (!(e instanceof ConflictError)) throw e; }
   }
   throw new GameError('เชื่อมต่อห้องเรียนไม่สำเร็จ กรุณาลองอีกครั้ง', 503);
 }
 
-export async function writeState(state: ClassState, etag: string) {
-  try { await store.write(statePath, state, { etag }); }
+// Read-only look at a room for the room picker: never creates anything.
+export async function peekState(room: number, now = Date.now()) {
+  const found = await store.read<ClassState>(statePath(room));
+  return found && found.data.expiresAt > now ? found.data : null;
+}
+
+export async function writeState(room: number, state: ClassState, etag: string) {
+  try { await store.write(statePath(room), state, { etag }); }
   catch (e) {
     if (e instanceof ConflictError) throw new GameError('สถานะเพิ่งเปลี่ยน กรุณากดอีกครั้ง', 409);
     throw e;

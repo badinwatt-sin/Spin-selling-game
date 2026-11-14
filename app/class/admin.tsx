@@ -1,11 +1,13 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, ExternalLink, Flag, LogOut, Play, RotateCcw, Star, Trophy, Users, X } from 'lucide-react';
+import { ArrowRight, BookOpen, ExternalLink, Flag, LogOut, Pause, Play, RotateCcw, Star, Trophy, Users, X } from 'lucide-react';
 import { api, errorText, mmss, useClock } from '@/lib/client';
 import { Bars, Brand, Notice, Qr, StageBadge, useOrigin } from '@/components/ui';
 import { showtimeCriteria, stages, type StageKey } from '@/lib/spin';
 import { postit, showtimeRubric } from '@/lib/content';
-import { Countdown, Podium, PostitCard, PostitSpotlight, ShowtimeTable, stageOf, useClass, type ClassView, type FeedbackView, type PostitView, type QuizView, type WallNote } from './shared';
+import { activityName, classUrl, Countdown, Podium, PostitCard, PostitSpotlight, ShowtimeTable, stageOf, useClass, useRoom, useRooms, type ClassView, type FeedbackView, type PostitView, type QuizView, type WallNote } from './shared';
+import { extendMinutes, postitLeft, postitMinutes } from '@/lib/timer';
+import { roomName, rooms } from '@/lib/rooms';
 import { Ico, Sticker } from '@/components/icons';
 
 const scenarioNames = ['แม่บ้าน', 'ข้าราชการ', 'พ่อค้า แม่ค้า', 'พนักงานบริษัทเอกชน', 'แพทย์ พยาบาล', 'นักธุรกิจ'];
@@ -29,7 +31,30 @@ function usePrimaryKey(busy: boolean) {
 const Key = () => <kbd className="kbd">Space</kbd>;
 
 export default function Admin() {
-  const { data, setData, error: pollError } = useClass('admin', 1200);
+  const r = useRoom();
+  if (!r) return <main className="page"><div className="loading">กำลังโหลด…</div></main>;
+  return <AdminRoom room={r.n} />;
+}
+
+// One tab per room; a dot marks rooms with people or an activity running.
+function RoomTabs({ room, current }: { room: number; current: { label: string | null; activity: string | null; people: number } }) {
+  const { data } = useRooms(6000);
+  return <nav className="room-tabs" aria-label="เลือกห้องเรียน">
+    {rooms.map(n => {
+      // The open room uses this page's live data; the others refresh every few seconds.
+      const info = n === room ? current : data?.rooms.find(x => x.room === n);
+      const busy = Boolean(info?.activity || info?.people);
+      return <a key={n} href={`?room=${n}`} className={`room-tab ${n === room ? 'on' : ''}`} aria-current={n === room ? 'page' : undefined}>
+        <b>ห้อง {n}</b>
+        <small>{info?.label ?? (busy ? `${info?.people ?? 0} คน` : 'ว่าง')}</small>
+        {busy && <i className="room-dot" title={activityName(info?.activity ?? null) ?? 'มีผู้เรียนอยู่'} />}
+      </a>;
+    })}
+  </nav>;
+}
+
+function AdminRoom({ room }: { room: number }) {
+  const { data, setData, error: pollError } = useClass('admin', room, 1200);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const origin = useOrigin();
@@ -37,7 +62,7 @@ export default function Admin() {
 
   async function act(body: Record<string, unknown>) {
     setBusy(true); setError(undefined);
-    try { setData(await api<ClassView>('/api/class', { activityId: data?.activity?.id ?? null, ...body })); }
+    try { setData(await api<ClassView>(classUrl(room), { activityId: data?.activity?.id ?? null, ...body })); }
     catch (e) { setError(errorText(e)); }
     finally { setBusy(false); }
   }
@@ -45,16 +70,18 @@ export default function Admin() {
   if (!data) return <main className="page"><div className="loading">{pollError ? errorText(pollError) : 'กำลังโหลด…'}</div></main>;
   if (!data.admin) return <Login ready={data.adminReady} onDone={() => location.reload()} />;
   const a = data.activity;
+  const join = `${origin}/class?room=${room}`;
 
   return <main className="page admin-page">
     <header className="topbar">
       <Brand small />
       <div className="topbar-right">
         <span className="name-pill"><Users size={16} /> {data.people} คนเข้าร่วม</span>
-        <a className="btn btn-ghost btn-sm" href="/class/display" target="_blank" rel="noreferrer"><ExternalLink size={16} /> เปิดจอ Live</a>
+        <a className="btn btn-ghost btn-sm" href={`/class/display?room=${room}`} target="_blank" rel="noreferrer"><ExternalLink size={16} /> เปิดจอ Live {room}</a>
         <button type="button" className="icon-btn" aria-label="ออกจากระบบ" onClick={async () => { await api('/api/class', { action: 'logout' }); location.reload(); }}><LogOut size={18} /></button>
       </div>
     </header>
+    <RoomTabs room={room} current={{ label: data.label, activity: a?.kind ?? null, people: data.people }} />
     <Notice error={error} onClose={() => setError(undefined)} />
     <div className="admin-grid">
       <section className="admin-main">
@@ -67,19 +94,31 @@ export default function Admin() {
       </section>
       <aside className="admin-side">
         <div className="card join-box">
-          <span className="eyebrow">ให้ผู้เรียนสแกนเข้าร่วม</span>
-          {origin && <Qr url={`${origin}/class`} size={180} />}
-          <b className="join-url">{origin.replace(/^https?:\/\//, '')}/class</b>
+          <span className="eyebrow">ให้ผู้เรียน{roomName(room, data.label)} สแกนเข้าร่วม</span>
+          {origin && <Qr url={join} size={180} />}
+          <b className="join-url">{join.replace(/^https?:\/\//, '')}</b>
         </div>
+        {data.boards > 0 && <a className="btn btn-ghost btn-block" href={`/class/board?room=${room}`} target="_blank" rel="noreferrer"><BookOpen size={18} /> สมุด Post-it ({data.boards} กระดาน)</a>}
         {a && <button type="button" className="btn btn-ghost btn-block" disabled={busy} onClick={() => confirm('ปิดกิจกรรมนี้และกลับไปหน้าเลือกกิจกรรม?') && act({ action: 'clear' })}><X size={18} /> ปิดกิจกรรมนี้</button>}
         <p className="muted small"><Ico name="idea" /> กด <Key /> หรือ → เพื่อกดปุ่มหลักของหน้าจอ</p>
       </aside>
     </div>
     <details className="danger-zone">
-      <summary>ตั้งค่าคลาส</summary>
+      <summary>ตั้งค่า{roomName(room)}</summary>
+      <RoomLabel key={data.label ?? ''} label={data.label} busy={busy} save={label => act({ action: 'room-label', label })} />
       <button type="button" className="btn btn-danger-ghost" disabled={busy} onClick={() => confirm('เริ่มคลาสใหม่? ผู้เรียนทุกคนต้องใส่ชื่อเข้าร่วมใหม่ คะแนนและผล Show Time ทั้งหมดจะถูกล้าง') && act({ action: 'new-class' })}><RotateCcw size={18} /> เริ่มคลาสใหม่ (ล้างทั้งหมด)</button>
     </details>
   </main>;
+}
+
+function RoomLabel({ label, busy, save }: { label: string | null; busy: boolean; save: (v: string) => void }) {
+  const [v, setV] = useState(label ?? '');
+  return <form className="room-label" onSubmit={e => { e.preventDefault(); save(v); }}>
+    <label className="field">ชื่อห้อง (ไม่บังคับ) — ขึ้นบนจอ Live และหน้าผู้เรียน
+      <input value={v} onChange={e => setV(e.target.value)} maxLength={30} placeholder="เช่น ทีมขาย BKK รุ่น 3" />
+    </label>
+    <button className="btn btn-ghost" disabled={busy || v === (label ?? '')}>บันทึกชื่อห้อง</button>
+  </form>;
 }
 
 function Login({ ready, onDone }: { ready: boolean; onDone: () => void }) {
@@ -130,7 +169,7 @@ function Start({ act, busy, data }: { act: Act; busy: boolean; data: ClassView }
           <select value={pScenario} onChange={e => setPScenario(Number(e.target.value))}><option value={-1}>ลูกค้าทั่วไป</option>{scenarioNames.map((n, i) => <option key={n} value={i}>{n}</option>)}</select>
         </label>
         <div className="field">เวลา
-          <div className="segmented">{[2, 3, 5].map(m => <button type="button" key={m} className={pMinutes === m ? 'on' : ''} onClick={() => setPMinutes(m)}>{m} นาที</button>)}</div>
+          <div className="segmented">{postitMinutes.map(m => <button type="button" key={m} className={pMinutes === m ? 'on' : ''} onClick={() => setPMinutes(m)}>{m} นาที</button>)}</div>
         </div>
         <button className="btn btn-primary btn-lg btn-block" disabled={busy}><Play size={20} /> เริ่ม Post-it</button>
       </form>
@@ -270,7 +309,8 @@ function FeedbackControl({ f, people, now: serverNow, act, busy }: { f: Feedback
 function PostitControl({ p, people, now: serverNow, act, busy }: { p: PostitView; people: number; now: number; act: Act; busy: boolean }) {
   const now = useClock(serverNow, 500);
   const s = stageOf(p.stage);
-  const left = p.endsAt - now;
+  const left = postitLeft(p, now);
+  const paused = Boolean(p.pausedAt);
   const notes = p.notes as WallNote[];
   const [local, setLocal] = useState<string | null | undefined>(undefined);
   const focusId = local !== undefined ? local : p.focus;
@@ -302,11 +342,18 @@ function PostitControl({ p, people, now: serverNow, act, busy }: { p: PostitView
       <div className="postit-status">
         <span className={`live-pill ${p.phase === 'writing' ? 'on' : ''}`}>{p.phase === 'writing' ? '● LIVE · ขึ้นจอทันทีที่ส่ง' : 'ปิดรับแล้ว'}</span>
         <b>{p.written}</b> / {people} คนแปะแล้ว
-        {p.phase === 'writing' && <span className="muted postit-left">{left > 0 ? `เหลือ ${mmss(left)}` : 'หมดเวลา'}</span>}
+        {p.phase === 'writing' && <span className={`postit-left ${paused ? 'paused' : 'muted'}`}>{paused ? (left > 0 ? `⏸ หยุดเวลา · ${mmss(left)}` : '⏸ หยุดเวลา · รอทุกคน') : left > 0 ? `เหลือ ${mmss(left)}` : 'หมดเวลา'}</span>}
         <span className="postit-status-action">{p.phase === 'writing'
           ? <button type="button" data-primary={open ? undefined : true} className="btn btn-primary" disabled={busy} onClick={() => act({ action: 'postit-reveal' })}>ปิดรับ Post-it <Key /></button>
           : <button type="button" data-primary={open ? undefined : true} className="btn btn-primary" disabled={busy} onClick={() => act({ action: 'clear' })}>จบกิจกรรม <ArrowRight size={18} /> <Key /></button>}</span>
       </div>
+      {p.phase === 'writing' && <div className="postit-time">
+        <button type="button" className={`btn btn-sm ${paused ? 'btn-primary' : 'btn-ghost'}`} disabled={busy} onClick={() => act({ action: 'postit-pause' })}>
+          {paused ? <><Play size={16} /> เดินเวลาต่อ</> : <><Pause size={16} /> หยุดเวลา</>}</button>
+        <span className="muted small">เพิ่มเวลา</span>
+        {extendMinutes.map(m => <button type="button" key={m} className="btn btn-ghost btn-sm" disabled={busy} onClick={() => act({ action: 'postit-extend', minutes: m })}>+{m} นาที</button>)}
+        {!paused && left <= 0 && <span className="small postit-time-hint">หมดเวลาแล้ว ยังมีคนไม่ส่ง? กด “หยุดเวลา” ให้ส่งได้ต่อ หรือเพิ่มเวลา</span>}
+      </div>}
       <p className="muted small">แตะ Post-it เพื่อขยายเต็มจอ (ขึ้นบนจอ Live ด้วย) · แตะ ★ เพื่อติดดาวคำถามตัวอย่างที่ดี</p>
       {notes.length === 0 ? <div className="postit-empty">ยังไม่มีใครส่ง Post-it · ใบแรกจะขึ้นตรงนี้ทันที</div>
         : <div className="postit-wall postit-wall-admin">{notes.map((n, i) => <PostitCard key={n.pid ?? i} n={n} i={i} color={s.color}
