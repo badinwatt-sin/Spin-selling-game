@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GameError } from '@/lib/server/game';
 import { choices, closeFeedback, controlClass, makeBallot, makeNote, notebook, publicState, revealPostit, scoreQuestion, summarizeFeedback } from '@/lib/server/classroom';
 import {
-  cached, countBallots, listPlayers, forget, listAnswers, peekState, playerToken, readBallots, readNotes, readPlayer, readState,
+  adminKeys, cached, countBallots, listPlayers, forget, listAnswers, peekState, playerToken, readBallots, readNotes, readPlayer, readState,
   registerPlayer, saveAnswer, saveBallot, saveNote, secret, writeState,
 } from '@/lib/server/class-storage';
 import type { StageKey } from '@/lib/spin';
@@ -19,10 +19,11 @@ const bearer = (req: Request) => req.headers.get('authorization')?.replace(/^Bea
 
 const equal = (a: string, b: string) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
 const signAdmin = (expiry: string, key: string) => createHmac('sha256', key).update(`spin-class-admin:${expiry}`).digest('base64url');
+// The session cookie is signed with the password that was used to log in, so it stops working when that password is removed.
 function isAdmin(req: NextRequest) {
-  const key = secret();
   const [expiry, sig] = (req.cookies.get(cookie)?.value ?? '').split('.');
-  return Boolean(key && sig && /^\d+$/.test(expiry) && Number(expiry) > Date.now() && equal(sig, signAdmin(expiry, key)));
+  if (!sig || !/^\d+$/.test(expiry) || Number(expiry) <= Date.now()) return false;
+  return adminKeys().some(key => equal(sig, signAdmin(expiry, key)));
 }
 
 function handle(e: unknown) {
@@ -81,9 +82,9 @@ export async function POST(req: NextRequest) {
     const load = (ms: number) => cached(`state:${room}`, ms, () => readState(room, now));
 
     if (b.action === 'login') {
-      const key = secret();
-      if (!key) return reply({ error: 'ยังไม่ได้ตั้งค่า LIVE_ADMIN_KEY ใน Vercel' }, 503);
-      if (typeof b.key !== 'string' || !equal(b.key, key)) return reply({ error: 'รหัสผู้สอนไม่ถูกต้อง' }, 401);
+      if (!secret()) return reply({ error: 'ยังไม่ได้ตั้งค่า LIVE_ADMIN_KEY ใน Vercel' }, 503);
+      const key = typeof b.key === 'string' ? adminKeys().find(k => equal(b.key as string, k)) : undefined;
+      if (!key) return reply({ error: 'รหัสผู้สอนไม่ถูกต้อง' }, 401);
       const expiry = String(now + adminHours * 3600_000);
       const res = reply({ ok: true });
       res.cookies.set(cookie, `${expiry}.${signAdmin(expiry, key)}`, {

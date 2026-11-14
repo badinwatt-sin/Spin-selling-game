@@ -11,6 +11,15 @@ const base = (sid: string) => `${root}class/${sid}/`;
 const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64url');
 const unb64 = (s: string) => Buffer.from(s, 'base64url').toString('utf8');
 
+// Every password that may open the trainer console: the owner's LIVE_ADMIN_KEY plus any guest coach
+// passwords in COACH_ADMIN_KEYS (comma-separated). Removing a coach password ends that coach's sessions.
+export function adminKeys() {
+  const main = secret();
+  if (!main) return [];
+  const extra = (process.env.COACH_ADMIN_KEYS ?? '').split(',').map(k => k.trim()).filter(k => k.length >= 8);
+  return [main, ...extra.filter(k => k !== main)];
+}
+
 export function secret() {
   const key = process.env.LIVE_ADMIN_KEY;
   if (key) return key;
